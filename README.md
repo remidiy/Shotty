@@ -41,12 +41,13 @@ The build is ad-hoc signed, so macOS treats each rebuild as a new app; re-enable
 
 ## Could Shortcuts or Folder Actions do this?
 
-Partly. A Folder Action (Automator) on the screenshot folder can run an AppleScript that copies the new file, activates an app and sends ⌘V via System Events. It works, but:
+Mostly, with some glue. On macOS 26, Shortcuts has personal automations with a "files added to a folder" trigger, and older Folder Actions (Automator) do the same. The shortcut can copy the new file and open the target app, but the actual paste needs a "Run AppleScript" step that sends ⌘V through System Events. Trade-offs:
 
-- Folder Actions are slow to fire and occasionally silently stop running.
-- They see the hidden temporary file and partially written recordings unless you add waits.
-- Each target app, prompt and paste style needs its own script edit; there's no quick switcher.
-- Shortcuts has no "new file in folder" trigger on macOS, so it can only be run by hand or by a hotkey.
+- It can fire on the hidden temporary file or a recording that's still being written unless you add waits.
+- Switching target app, prompt or paste style means editing the shortcut; there's no quick switcher.
+- Attachment vs. file-path pasting (chat apps vs. terminal agents) needs separate branches.
+- Your clipboard gets overwritten.
+- Folder Actions in particular are slow to fire and sometimes silently stop.
 
 Shotty is the same idea with reliable file watching, a one-click target switcher, per-app paste modes, an optional prompt, and clipboard restore.
 
