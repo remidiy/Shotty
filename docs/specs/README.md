@@ -10,3 +10,4 @@ Each feature gets a short spec here, committed with its pull request.
 | 0004 | [DMG packaging and versioned GitHub releases](0004-dmg-and-releases.md) | 0.3.0 |
 | 0005 | [Capture flies into the app](0005-fly-in-animation.md) | 0.4.0 |
 | 0006 | [Permissions that stick](0006-stable-permissions.md) | 0.4.1 |
+| 0007 | [One logo, a full app window, and a welcome](0007-full-app-onboarding.md) | 0.5.0 |

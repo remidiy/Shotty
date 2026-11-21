@@ -5,6 +5,8 @@ import SwiftUI
 struct MenuView: View {
     @Bindable var model: AppModel
     @Environment(\.openSettings) private var openSettings
+    @Environment(\.openWindow) private var openWindow
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -44,7 +46,7 @@ struct MenuView: View {
 
     private var header: some View {
         HStack(spacing: 10) {
-            LogoPlaceholder(size: 26)
+            ShottyMark(size: 26)
             VStack(alignment: .leading, spacing: 0) {
                 Text("Shotty").font(.system(size: 13, weight: .semibold))
                 Text(model.enabled ? "Watching \(model.folder.lastPathComponent)" : "Paused")
@@ -214,13 +216,19 @@ struct MenuView: View {
 
     private var footer: some View {
         HStack(spacing: 2) {
+            MenuRowButton(title: "Open Shotty", shortcut: "⌘0") {
+                dismiss()
+                NSApp.activate()
+                openWindow(id: SceneID.main)
+            }
+            .keyboardShortcut("0")
             MenuRowButton(title: "Settings…", shortcut: "⌘,") {
                 NSApp.activate()
                 openSettings()
             }
             .keyboardShortcut(",")
             Spacer()
-            MenuRowButton(title: "Quit Shotty", shortcut: "⌘Q") { NSApp.terminate(nil) }
+            MenuRowButton(title: "Quit", shortcut: "⌘Q") { NSApp.terminate(nil) }
                 .keyboardShortcut("q")
         }
     }
@@ -228,7 +236,7 @@ struct MenuView: View {
 
 // MARK: - Pieces
 
-private struct SectionLabel: View {
+struct SectionLabel: View {
     let text: String
     init(_ text: String) { self.text = text }
     var body: some View {
@@ -236,7 +244,7 @@ private struct SectionLabel: View {
     }
 }
 
-private struct Callout: View {
+struct Callout: View {
     let symbol: String
     let tint: Color
     let text: String
@@ -359,20 +367,5 @@ private struct CaptureRow: View {
                 Image(systemName: capture.isMovie ? "video.fill" : "photo").font(.system(size: 11)).foregroundStyle(.secondary)
             }
         }
-    }
-}
-
-/// Stand-in mark until the final logo arrives.
-struct LogoPlaceholder: View {
-    var size: CGFloat = 26
-    var body: some View {
-        RoundedRectangle(cornerRadius: size * 0.28)
-            .fill(Color.accentColor.gradient)
-            .frame(width: size, height: size)
-            .overlay {
-                Image(systemName: "camera.viewfinder")
-                    .font(.system(size: size * 0.52, weight: .semibold))
-                    .foregroundStyle(.white)
-            }
     }
 }

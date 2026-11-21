@@ -69,10 +69,14 @@ final class AppModel {
         watcher = FolderWatcher { [weak self] url in self?.captured(url) }
         watcher.includeRecordings = includeRecordings
         watcher.onlyScreenshots = onlyScreenshots
-        recent = HistoryStore.load()
+        if DemoWindow.isAppDemo {
+            loadDemoCaptures()  // sample data only: nothing is watched, saved or sent
+        } else {
+            recent = HistoryStore.load()
+        }
         applyWatching()
         applyHotKey()
-        trackFrontmostApp()
+        if !isDemo { trackFrontmostApp() }
 
         // Pick up an Accessibility grant made in System Settings while we run.
         Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
@@ -169,7 +173,7 @@ final class AppModel {
     func useSystemFolder() { customFolderPath = nil }
 
     private func applyWatching() {
-        guard let watcher else { return }
+        guard let watcher, !isDemo else { return }
         if enabled { watcher.start(folder: folder) } else { watcher.stop() }
     }
 
