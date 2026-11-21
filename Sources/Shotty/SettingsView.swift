@@ -39,8 +39,23 @@ struct SettingsView: View {
             }
 
             Section("Sending") {
+                Toggle("Send to the app I was using", isOn: $model.followFrontmost)
+                if !model.followFrontmost {
+                    Picker("Always send to", selection: $model.targetID) {
+                        ForEach(model.availableTargets) { Text($0.name).tag($0.bundleID) }
+                    }
+                }
                 Toggle("Send automatically (press Return)", isOn: $model.autoSend)
                 Toggle("Restore my clipboard afterwards", isOn: $model.restoreClipboard)
+            }
+
+            Section("History") {
+                LabeledContent("Saved captures") {
+                    HStack {
+                        Text("\(model.recent.count)").foregroundStyle(.secondary)
+                        Button("Clear History") { model.clearHistory() }.disabled(model.recent.isEmpty)
+                    }
+                }
             }
 
             Section("General") {

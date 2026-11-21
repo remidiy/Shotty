@@ -24,10 +24,10 @@ struct MenuView: View {
                             text: "macOS holds each screenshot about 5 seconds for its floating thumbnail.",
                             action: "Make Instant") { model.makeCapturesInstant() }
                 }
-                targetSection
+                destinationSection
                 promptSection
                 captureButtons
-                recentSection
+                historySection
             }
             .padding(.horizontal, 14)
             .padding(.bottom, 12)
@@ -59,37 +59,75 @@ struct MenuView: View {
         }
     }
 
-    // MARK: Target
+    // MARK: Destination
 
-    private var targetSection: some View {
+    /// One quiet row: where the next capture goes. Defaults to the app you were just using.
+    private var destinationSection: some View {
         VStack(alignment: .leading, spacing: 6) {
-            SectionLabel("Send To")
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 4), spacing: 6) {
-                ForEach(model.availableTargets) { target in
-                    TargetTile(target: target, selected: target.bundleID == model.target?.bundleID) {
-                        model.targetID = target.bundleID
+            SectionLabel("Sends To")
+            HStack(spacing: 10) {
+                Group {
+                    if let icon = model.target?.icon {
+                        Image(nsImage: icon).resizable().interpolation(.high)
+                    } else {
+                        Image(systemName: "macwindow").font(.system(size: 18)).foregroundStyle(.secondary)
                     }
-                    .contextMenu {
-                        if target.isCustom {
-                            Button("Remove \(target.name)", role: .destructive) { model.removeCustomTarget(target) }
+                }
+                .frame(width: 28, height: 28)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(model.target?.name ?? "The app you're using")
+                        .font(.system(size: 13, weight: .medium))
+                    Text(model.followFrontmost ? "Last app you used" : "Always this app")
+                        .font(.system(size: 11)).foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 4)
+                if let target = model.target {
+                    Picker("Paste as", selection: Binding(
+                        get: { target.delivery },
+                        set: { model.setDelivery($0, for: target) }
+                    )) {
+                        ForEach(Delivery.allCases) { Text($0.label).tag($0) }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .fixedSize()
+                    .controlSize(.small)
+                    .help("Attachment pastes the image (chat apps). File path pastes its path (Claude Code, Codex CLI). Remembered per app.")
+                }
+                destinationMenu
+            }
+            .padding(8)
+            .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 8))
+        }
+    }
+
+    private var destinationMenu: some View {
+        Menu {
+            Toggle("The App I Was Using", isOn: $model.followFrontmost)
+            Divider()
+            Section("Always Send To") {
+                ForEach(model.availableTargets) { target in
+                    Button {
+                        model.targetID = target.bundleID
+                        model.followFrontmost = false
+                    } label: {
+                        if !model.followFrontmost && model.fixedTarget?.bundleID == target.bundleID {
+                            Label(target.name, systemImage: "checkmark")
+                        } else {
+                            Text(target.name)
                         }
                     }
                 }
-                AddTile { model.addCustomTarget() }
+                Button("Other App…") { model.addCustomTarget() }
             }
-            if let target = model.target {
-                Picker("Paste as", selection: Binding(
-                    get: { target.delivery },
-                    set: { model.setDelivery($0, for: target) }
-                )) {
-                    ForEach(Delivery.allCases) { Text($0.label).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .controlSize(.small)
-                .labelsHidden()
-                .help("Attachment pastes the image itself (chat apps). File path pastes its path (Claude Code, Codex CLI).")
-            }
+        } label: {
+            Image(systemName: "ellipsis.circle")
         }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Choose where captures go")
     }
 
     // MARK: Prompt
@@ -136,19 +174,19 @@ struct MenuView: View {
         .controlSize(.large)
     }
 
-    // MARK: Recent
+    // MARK: History
 
-    private var recentSection: some View {
+    private var historySection: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                SectionLabel("Recent")
+                SectionLabel(model.recent.isEmpty ? "History" : "History · \(model.recent.count)")
                 Spacer()
                 if let status = model.status {
                     Text(status).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
                 }
             }
             if model.recent.isEmpty {
-                Text("Screenshots and recordings you take show up here and go straight to \(model.target?.name ?? "your app").")
+                Text("Every screenshot and recording is kept here. Drag one into any app, or click ↻ to send it again.")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -156,13 +194,18 @@ struct MenuView: View {
                     .padding(10)
                     .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 8))
             } else {
-                VStack(spacing: 0) {
-                    ForEach(Array(model.recent.prefix(4).enumerated()), id: \.element.id) { index, capture in
-                        if index > 0 { Divider().padding(.leading, 52) }
-                        CaptureRow(capture: capture) { model.send(capture.url) }
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(Array(model.recent.enumerated()), id: \.element.id) { index, capture in
+                            if index > 0 { Divider().padding(.leading, 60) }
+                            CaptureRow(capture: capture, model: model)
+                        }
                     }
                 }
+                .scrollIndicators(.automatic)
+                .frame(height: min(CGFloat(model.recent.count) * 45, 230))
                 .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 8))
+                .clipShape(.rect(cornerRadius: 8))
             }
         }
     }
@@ -214,71 +257,6 @@ private struct Callout: View {
     }
 }
 
-/// A Control Center–style tile: app icon over its name, accent ring when selected.
-private struct TargetTile: View {
-    let target: Target
-    let selected: Bool
-    let select: () -> Void
-    @State private var hovering = false
-
-    var body: some View {
-        Button(action: select) {
-            VStack(spacing: 4) {
-                Group {
-                    if let icon = target.icon {
-                        Image(nsImage: icon).resizable().interpolation(.high)
-                    } else {
-                        Image(systemName: target.symbol).font(.system(size: 18))
-                    }
-                }
-                .frame(width: 28, height: 28)
-                Text(target.name)
-                    .font(.system(size: 10, weight: selected ? .semibold : .regular))
-                    .lineLimit(1)
-                    .foregroundStyle(selected ? .primary : .secondary)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 7)
-            .background(background, in: .rect(cornerRadius: 9))
-            .overlay {
-                RoundedRectangle(cornerRadius: 9)
-                    .strokeBorder(selected ? Color.accentColor : .clear, lineWidth: 1.5)
-            }
-            .contentShape(.rect(cornerRadius: 9))
-        }
-        .buttonStyle(.plain)
-        .onHover { hovering = $0 }
-        .accessibilityAddTraits(selected ? .isSelected : [])
-        .accessibilityLabel(target.name)
-    }
-
-    private var background: AnyShapeStyle {
-        if selected { return AnyShapeStyle(Color.accentColor.opacity(0.14)) }
-        return AnyShapeStyle(.quaternary.opacity(hovering ? 0.9 : 0.5))
-    }
-}
-
-private struct AddTile: View {
-    let add: () -> Void
-    @State private var hovering = false
-
-    var body: some View {
-        Button(action: add) {
-            VStack(spacing: 4) {
-                Image(systemName: "plus").font(.system(size: 15, weight: .medium)).frame(width: 28, height: 28)
-                Text("Other…").font(.system(size: 10)).foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 7)
-            .background(.quaternary.opacity(hovering ? 0.9 : 0.5), in: .rect(cornerRadius: 9))
-            .contentShape(.rect(cornerRadius: 9))
-        }
-        .buttonStyle(.plain)
-        .onHover { hovering = $0 }
-        .help("Add any app")
-    }
-}
-
 /// Footer button that highlights on hover like a menu item.
 private struct MenuRowButton: View {
     let title: String
@@ -304,24 +282,27 @@ private struct MenuRowButton: View {
     }
 }
 
+/// A history row. Drag it out to drop the file into any app.
 private struct CaptureRow: View {
     let capture: Capture
-    let resend: () -> Void
+    let model: AppModel
     @State private var hovering = false
 
     var body: some View {
         HStack(spacing: 10) {
             thumbnail
-                .frame(width: 34, height: 24)
+                .frame(width: 42, height: 30)
                 .clipShape(.rect(cornerRadius: 4))
                 .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(.separator, lineWidth: 0.5))
             VStack(alignment: .leading, spacing: 1) {
-                Text(capture.url.deletingPathExtension().lastPathComponent)
+                Text(capture.title)
                     .font(.system(size: 12))
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Group {
-                    if let error = capture.error {
+                    if !capture.exists {
+                        Text("File moved or deleted")
+                    } else if let error = capture.error {
                         Text(error).foregroundStyle(.red)
                     } else if let sent = capture.sentTo {
                         Text("\(sent) · \(capture.date, format: .relative(presentation: .named))")
@@ -334,29 +315,48 @@ private struct CaptureRow: View {
                 .lineLimit(1)
             }
             Spacer(minLength: 0)
-            Button(action: resend) {
-                Image(systemName: "arrow.uturn.forward")
+            if hovering && capture.exists {
+                HStack(spacing: 2) {
+                    Button { model.send(capture.url) } label: { Image(systemName: "arrow.clockwise") }
+                        .help("Send again to \(model.target?.name ?? "the current app")")
+                    Button { NSWorkspace.shared.activateFileViewerSelecting([capture.url]) } label: { Image(systemName: "folder") }
+                        .help("Show in Finder")
+                }
+                .buttonStyle(.borderless)
+                .font(.system(size: 12))
             }
-            .buttonStyle(.borderless)
-            .opacity(hovering ? 1 : 0)
-            .help("Send again")
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 6)
-        .background(hovering ? Color.primary.opacity(0.05) : .clear)
+        .background(hovering ? Color.primary.opacity(0.06) : .clear)
+        .opacity(capture.exists ? 1 : 0.5)
         .contentShape(.rect)
         .onHover { hovering = $0 }
-        .onTapGesture(count: 2) { NSWorkspace.shared.activateFileViewerSelecting([capture.url]) }
-        .help("Double-click to show in Finder")
+        .onDrag {
+            NSItemProvider(contentsOf: capture.url) ?? NSItemProvider(object: capture.url as NSURL)
+        } preview: {
+            thumbnail.frame(width: 120, height: 80).clipShape(.rect(cornerRadius: 6))
+        }
+        .onTapGesture(count: 2) { NSWorkspace.shared.open(capture.url) }
+        .contextMenu {
+            Button("Send to \(model.target?.name ?? "Current App")") { model.send(capture.url) }
+            Button("Copy") { model.copyToClipboard(capture) }
+            Button("Open") { NSWorkspace.shared.open(capture.url) }
+            Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([capture.url]) }
+            Divider()
+            Button("Remove from History") { model.removeFromHistory(capture) }
+            Button("Clear History", role: .destructive) { model.clearHistory() }
+        }
+        .help("Drag into any app · double-click to open")
     }
 
     @ViewBuilder private var thumbnail: some View {
-        if !capture.isMovie, let image = NSImage(contentsOf: capture.url) {
+        if !capture.isMovie, let image = Thumbnails.image(for: capture.url) {
             Image(nsImage: image).resizable().aspectRatio(contentMode: .fill)
         } else {
             ZStack {
                 Rectangle().fill(.quaternary)
-                Image(systemName: capture.isMovie ? "video.fill" : "photo").font(.system(size: 10)).foregroundStyle(.secondary)
+                Image(systemName: capture.isMovie ? "video.fill" : "photo").font(.system(size: 11)).foregroundStyle(.secondary)
             }
         }
     }

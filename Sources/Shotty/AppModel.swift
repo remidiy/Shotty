@@ -2,16 +2,6 @@ import AppKit
 import Observation
 import ServiceManagement
 
-struct Capture: Identifiable, Hashable {
-    let url: URL
-    let date: Date
-    var sentTo: String?
-    var error: String?
-
-    var id: URL { url }
-    var isMovie: Bool { FolderWatcher.movieExtensions.contains(url.pathExtension.lowercased()) }
-}
-
 @MainActor
 @Observable
 final class AppModel {
@@ -28,8 +18,13 @@ final class AppModel {
     var customTargets: [Target] { didSet { saveTargets() } }
     var deliveryOverrides: [String: Delivery] { didSet { saveTargets() } }
     var hotKeyEnabled: Bool { didSet { save(hotKeyEnabled, "hotKeyEnabled"); applyHotKey() } }
+    /// Send to whichever app you were using when you took the capture.
+    var followFrontmost: Bool { didSet { save(followFrontmost, "followFrontmost") } }
 
-    var recent: [Capture] = []
+    /// Every capture, newest first. Saved to disk.
+    var recent: [Capture] = [] { didSet { if !isDemo { HistoryStore.save(recent) } } }
+    /// The last app the user was working in (not Shotty, Finder or the screenshot UI).
+    var lastApp: Target?
     var status: String?
     var isSending = false
     var accessibilityGranted = Sender.isTrusted
@@ -37,12 +32,22 @@ final class AppModel {
 
     @ObservationIgnored private var watcher: FolderWatcher!
     @ObservationIgnored private var hotKey: HotKey?
+    @ObservationIgnored private var activationObserver: NSObjectProtocol?
+
+    /// Apps that are never "the app you were using".
+    private static let ignoredBundleIDs: Set<String> = [
+        "com.remidiy.shotty", "com.apple.finder", "com.apple.screencaptureui", "com.apple.Screenshot",
+        "com.apple.dock", "com.apple.loginwindow", "com.apple.systemuiserver", "com.apple.controlcenter",
+        "com.apple.notificationcenterui", "com.apple.Spotlight", "com.apple.WindowManager",
+    ]
 
     init() {
         defaults.register(defaults: [
             "enabled": true, "includeRecordings": true, "onlyScreenshots": true,
             "autoSend": false, "restoreClipboard": true, "prompt": "", "hotKeyEnabled": true,
+            "followFrontmost": true,
         ])
+        followFrontmost = defaults.bool(forKey: "followFrontmost")
         hotKeyEnabled = defaults.bool(forKey: "hotKeyEnabled")
         enabled = defaults.bool(forKey: "enabled")
         includeRecordings = defaults.bool(forKey: "includeRecordings")
@@ -59,8 +64,10 @@ final class AppModel {
         watcher = FolderWatcher { [weak self] url in self?.captured(url) }
         watcher.includeRecordings = includeRecordings
         watcher.onlyScreenshots = onlyScreenshots
+        recent = HistoryStore.load()
         applyWatching()
         applyHotKey()
+        trackFrontmostApp()
 
         // Pick up an Accessibility grant made in System Settings while we run.
         Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
@@ -84,7 +91,34 @@ final class AppModel {
         }
     }
 
-    var target: Target? { availableTargets.first { $0.bundleID == targetID } ?? availableTargets.first }
+    /// The fixed app used when "app you were using" is off, or when there is no such app yet.
+    var fixedTarget: Target? { availableTargets.first { $0.bundleID == targetID } ?? availableTargets.first }
+
+    /// Where the next capture goes.
+    var target: Target? {
+        if followFrontmost, var app = lastApp {
+            if let override = deliveryOverrides[app.bundleID] { app.delivery = override }
+            return app
+        }
+        return fixedTarget
+    }
+
+    private func trackFrontmostApp() {
+        if let app = NSWorkspace.shared.frontmostApplication { noteActivated(app) }
+        activationObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
+        ) { [weak self] note in
+            guard let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
+            MainActor.assumeIsolated { self?.noteActivated(app) }
+        }
+    }
+
+    private func noteActivated(_ app: NSRunningApplication) {
+        guard let id = app.bundleIdentifier, !Self.ignoredBundleIDs.contains(id),
+              app.activationPolicy == .regular else { return }
+        if lastApp?.bundleID == id { return }
+        lastApp = Target.forApp(bundleID: id, name: app.localizedName ?? id)
+    }
 
     func setDelivery(_ delivery: Delivery, for target: Target) {
         deliveryOverrides[target.bundleID] = delivery
@@ -99,6 +133,7 @@ final class AppModel {
         guard panel.runModal() == .OK, let url = panel.url, let t = Target.custom(appURL: url) else { return }
         if !availableTargets.contains(where: { $0.bundleID == t.bundleID }) { customTargets.append(t) }
         targetID = t.bundleID
+        followFrontmost = false
     }
 
     func removeCustomTarget(_ target: Target) {
@@ -135,19 +170,24 @@ final class AppModel {
 
     private func captured(_ url: URL) {
         if isDemo { return }
+        let destination = target  // the app you were in when the file appeared
         remember(url)
         guard enabled else { return }
-        send(url)
+        send(url, to: destination)
     }
 
     private func remember(_ url: URL) {
         recent.removeAll { $0.url == url }
         recent.insert(Capture(url: url, date: .now), at: 0)
-        if recent.count > 8 { recent.removeLast(recent.count - 8) }
+        if recent.count > HistoryStore.limit { recent.removeLast(recent.count - HistoryStore.limit) }
     }
 
-    func send(_ url: URL) {
-        guard let target else { status = "Pick an app to send to."; return }
+    func send(_ url: URL, to destination: Target? = nil) {
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            status = "\(url.lastPathComponent) was moved or deleted."
+            return
+        }
+        guard let target = destination ?? target else { status = "Switch to the app you want, then capture."; return }
         isSending = true
         let start = Date()
         Task {
@@ -166,12 +206,26 @@ final class AppModel {
         }
     }
 
+    func removeFromHistory(_ capture: Capture) {
+        recent.removeAll { $0.id == capture.id }
+    }
+
+    func clearHistory() { recent.removeAll() }
+
+    func copyToClipboard(_ capture: Capture) {
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        pb.writeObjects([capture.url as NSURL])
+        status = "Copied \(capture.title)"
+    }
+
     /// Capture with Shotty's own shortcut: no floating thumbnail, so it sends immediately.
     func instantCapture() {
+        let destination = target  // decide before the capture UI appears
         InstantCapture.run { [weak self] url in
             guard let self, let url else { return }
             self.remember(url)
-            self.send(url)
+            self.send(url, to: destination)
         }
     }
 
@@ -190,19 +244,23 @@ final class AppModel {
         }
     }
 
+    /// Sends the newest capture: whichever is newer of the last history item and the newest file in the folder.
     func sendLatest() {
-        if let latest = recent.first { send(latest.url); return }
-        let names = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: [.creationDateKey])) ?? []
-        let newest = names
-            .filter { watcher.isCandidate($0) }
-            .max { a, b in
-                let da = (try? a.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast
-                let db = (try? b.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast
-                return da < db
-            }
-        guard let newest else { status = "No screenshots in \(folder.lastPathComponent) yet."; return }
-        remember(newest)
-        send(newest)
+        let created: (URL) -> Date = { (try? $0.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast }
+        let files = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: [.creationDateKey])) ?? []
+        let newestFile = files.filter { watcher.isCandidate($0) }.max { created($0) < created($1) }
+        let lastKept = recent.first { $0.exists }
+
+        let pick: URL?
+        switch (lastKept, newestFile) {
+        case let (kept?, file?): pick = created(file) > kept.date ? file : kept.url
+        case let (kept?, nil): pick = kept.url
+        case let (nil, file?): pick = file
+        default: pick = nil
+        }
+        guard let pick else { status = "No screenshots in \(folder.lastPathComponent) yet."; return }
+        if recent.first?.url != pick { remember(pick) }
+        send(pick)
     }
 
     private func mark(_ url: URL, sentTo: String?, error: String?) {
@@ -219,10 +277,13 @@ final class AppModel {
         isDemo = true
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("ShottyDemo", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let names = [("Screenshot 2026-11-21 at 10.42.17.png", "Claude", 40.0),
+        lastApp = Target.presets.first { $0.name == "Cursor" }
+        let names = [("Screenshot 2026-11-21 at 10.42.17.png", "Cursor", 40.0),
                      ("Screen Recording 2026-11-21 at 10.31.02.mov", "Claude", 700.0),
-                     ("Shotty 2026-11-21 101504.png", "Cursor", 1700.0)]
-        let colors: [NSColor] = [.systemBlue, .systemPurple, .systemTeal]
+                     ("Shotty 2026-11-21 101504.png", "Ghostty", 1700.0),
+                     ("Screenshot 2026-11-21 at 09.58.40.png", "Claude", 4200.0),
+                     ("Screenshot 2026-11-20 at 18.12.03.png", "Codex", 64000.0)]
+        let colors: [NSColor] = [.systemBlue, .systemPurple, .systemTeal, .systemOrange, .systemPink]
         recent = names.enumerated().map { i, item in
             let url = dir.appendingPathComponent(item.0)
             if !item.0.hasSuffix(".mov") {
@@ -241,7 +302,7 @@ final class AppModel {
             }
             return Capture(url: url, date: Date().addingTimeInterval(-item.2), sentTo: item.1)
         }
-        status = "Sent to Claude in 182 ms"
+        status = "Sent to Cursor in 182 ms"
     }
 
     // MARK: - Launch at login
