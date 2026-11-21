@@ -26,6 +26,7 @@ Showing an agent what you see usually takes five steps: screenshot, find the fil
 - **Works with normal screenshots too**: ⇧⌘3, ⇧⌘4 and ⇧⌘5 recordings are picked up from your screenshot folder.
 - **Goes to the app you were using**: work in Cursor, take a screenshot, it lands in Cursor. Switch to Ghostty, it lands there. Or pin one app ("Always send to…").
 - **A full app when you want it**: Open Shotty from the menu bar for a window with Home, History, Targets and Settings. It shows in the Dock while the window is open and goes back to the menu bar when you close it.
+- **A logo that pays attention**: Shotty's eyes say hello when a window opens, follow your pointer (menu bar icon included) and blink when you click them. Turn it off in Settings; Reduce Motion keeps them still.
 - **A short welcome on first launch**: what Shotty does, where shots go, Accessibility (with a live check), the screenshot folder and the shortcuts. Reopen it from Help → Show Welcome….
 - **History you can drag from**: every capture is kept in the menu bar panel and the History section. Drag one into any app, send it again, or reveal it in Finder.
 - **Two paste modes**: *Attachment* pastes the image itself (chat apps). *File path* pastes the path, which is what Claude Code and Codex CLI read in a terminal.

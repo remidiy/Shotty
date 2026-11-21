@@ -58,6 +58,11 @@ When the welcome window, the main window or the menu bar panel opens, the logo's
 
 - One timeline (`EyeAnimation.hello` in `Logo.swift`) drives both the SwiftUI logo and the menu bar icon.
 - **Click to blink**: clicking the logo anywhere it appears (welcome, main window, panel) makes it blink once (~0.17 s); rapid clicks blink again. Allowed under Reduce Motion, since the eyes don't travel.
+- **Eyes follow the pointer**: wherever the logo is on screen (menu bar icon, welcome, main window, panel), its eyes look toward the mouse pointer, up to 9 % of the mark's side (full reach about 300 pt away), and drift back to centre 3 s after the pointer stops. The hello animation takes over while it plays; blinks combine with the gaze. Setting: **Settings → General → Eyes follow the pointer** (on by default).
+  - `PointerTracker` listens with global and local mouse-moved monitors (no permission needed) only while a logo is visible and the setting is on, publishes at most 30 updates a second, and does nothing while the pointer is still. It pauses under Reduce Motion (eyes centred, blinks still allowed) and while the screen is asleep or locked.
+  - The window logos redraw at the update rate with no implicit animation; only the drift back to centre is a spring. The menu bar icon swaps its status item image directly (not through SwiftUI), snapped to half-point steps and cached, so it redraws only when the eyes really move. Re-rendering the MenuBarExtra label instead cost about 17 % CPU.
+  - Measured with the main window and menu bar icon visible (`top`, 2 s samples): 0.0 % with the pointer still; about 5 % with the `--pointer-tour -` self-test driving 30 updates a second (21–24 % before the direct status-item swap).
+  - `--demo-app --open-main --pointer-tour <dir>` writes frames of a simulated pointer circling the Home logo (no screen access needed); `--pointer-tour -` writes none, for measuring CPU.
 - **Menu bar icon**: plays the same sequence at launch and when the panel opens, by swapping freshly drawn 18 pt template images about 30 times a second for 2 s. No idle blinks there.
 - **Reduce Motion**: no movement. The window logos fade in; the menu bar icon stays still.
 - **Rive**: the same mark and motion are authored as a Rive project in `design/rive/shotty-logo` (state machine `Eyes`: `intro`, `idle`, a `hello` trigger and a `reduceMotion` input). It isn't in the app yet because the Rive workspace's plan adds the Rive splash screen to published files. Once it can publish without it, the `.riv` goes in `Resources/` and is shown with RiveRuntime, with this SwiftUI animation kept for Reduce Motion and load failures.
@@ -84,5 +89,6 @@ When the welcome window, the main window or the menu bar panel opens, the logo's
 - Menu bar icon is the rounded square with eyes; turning Shotty off shows the outline.
 - `scripts/build-app.sh`: the Dock icon is the website mark.
 - Opening the welcome window, the main window and the menu bar panel each plays the eye animation once; with Reduce Motion on, the logo only fades in.
+- Move the pointer around each logo: the eyes follow; stop for 3 s: they return to centre. Turn off **Eyes follow the pointer** or turn on Reduce Motion: they stay centred. `top` shows ~0 % CPU with the pointer still.
 
 Screenshots: [assets/screenshots/v0.5.0](../../assets/screenshots/v0.5.0).

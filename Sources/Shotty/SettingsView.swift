@@ -72,6 +72,7 @@ struct SettingsForm: View {
             }
 
             Section("General") {
+                Toggle("Eyes follow the pointer", isOn: $model.eyesFollowPointer)
                 Button("Show Welcome Guide…") { openWindow(id: SceneID.welcome) }
                 Toggle("Open at login", isOn: Binding(get: { model.launchAtLogin }, set: { model.launchAtLogin = $0 }))
                 LabeledContent("Accessibility") {

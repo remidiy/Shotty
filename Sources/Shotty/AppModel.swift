@@ -22,6 +22,10 @@ final class AppModel {
     var followFrontmost: Bool { didSet { save(followFrontmost, "followFrontmost") } }
     /// Show the capture flying into the target app (spec 0005).
     var animateCaptures: Bool { didSet { save(animateCaptures, "animateCaptures") } }
+    /// The logo's eyes follow the mouse pointer (spec 0007).
+    var eyesFollowPointer: Bool {
+        didSet { save(eyesFollowPointer, "eyesFollowPointer"); PointerTracker.shared.enabled = eyesFollowPointer }
+    }
 
     /// Every capture, newest first. Saved to disk.
     var recent: [Capture] = [] { didSet { if !isDemo { HistoryStore.save(recent) } } }
@@ -49,9 +53,11 @@ final class AppModel {
         defaults.register(defaults: [
             "enabled": true, "includeRecordings": true, "onlyScreenshots": true,
             "autoSend": false, "restoreClipboard": true, "prompt": "", "hotKeyEnabled": true,
-            "followFrontmost": true, "animateCaptures": true,
+            "followFrontmost": true, "animateCaptures": true, "eyesFollowPointer": true,
         ])
         animateCaptures = defaults.bool(forKey: "animateCaptures")
+        eyesFollowPointer = defaults.bool(forKey: "eyesFollowPointer")
+        PointerTracker.shared.enabled = defaults.bool(forKey: "eyesFollowPointer")
         followFrontmost = defaults.bool(forKey: "followFrontmost")
         hotKeyEnabled = defaults.bool(forKey: "hotKeyEnabled")
         enabled = defaults.bool(forKey: "enabled")

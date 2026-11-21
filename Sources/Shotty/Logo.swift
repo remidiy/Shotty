@@ -80,6 +80,7 @@ enum EyeAnimation {
 /// Shotty's logo as a SwiftUI view (same mark as the app icon and the website).
 /// With `animated`, the eyes say hello when the view appears (and whenever `replay` changes);
 /// with `idleBlinks`, they blink every 8–12 s while it's on screen. Reduce Motion: a fade only.
+/// The eyes follow the mouse pointer while it moves (see `PointerTracker`), and a click blinks.
 struct ShottyMark: View {
     var size: CGFloat = 28
     var animated = false
@@ -91,19 +92,35 @@ struct ShottyMark: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var playback: (start: Date, keys: [EyeAnimation.Key])?
     @State private var shown = false
+    @State private var anchor = ScreenAnchor()
+
+    /// Where the pointer pulls the eyes. The hello animation takes over while it plays.
+    private var gaze: EyePose {
+        guard pose == nil, playback?.keys.count != EyeAnimation.hello.count else { return .rest }
+        return PointerTracker.shared.gaze(from: anchor.screenCenter)
+    }
 
     var body: some View {
+        let gaze = self.gaze
         ZStack(alignment: .topLeading) {
             RoundedRectangle(cornerRadius: size * LogoGeometry.cornerRatio, style: .continuous)
                 .fill(LinearGradient(colors: [LogoGeometry.top, LogoGeometry.bottom], startPoint: .top, endPoint: .bottom))
-            if let playback {
-                TimelineView(.animation) { context in
-                    eyes(EyeAnimation.pose(at: context.date.timeIntervalSince(playback.start), in: playback.keys))
+            Group {
+                if let playback {
+                    TimelineView(.animation) { context in
+                        eyes(EyeAnimation.pose(at: context.date.timeIntervalSince(playback.start), in: playback.keys), gaze: gaze)
+                    }
+                } else {
+                    eyes(pose ?? .rest, gaze: gaze)
                 }
-            } else {
-                eyes(pose ?? .rest)
             }
+            // Moves arrive 30 times a second, so they're drawn as-is (cheap); only the drift
+            // back to centre after the pointer stops is animated.
+            .animation(PointerTracker.shared.isFollowing ? nil : .spring(response: 0.45, dampingFraction: 0.8), value: gaze)
         }
+        .background(ScreenAnchorReader(anchor: anchor))
+        .onAppear { if pose == nil { PointerTracker.shared.retain() } }
+        .onDisappear { if pose == nil { PointerTracker.shared.release() } }
         .frame(width: size, height: size)
         .opacity(animated && reduceMotion && !shown ? 0 : 1)
         .contentShape(.rect(cornerRadius: size * LogoGeometry.cornerRatio))
@@ -129,15 +146,15 @@ struct ShottyMark: View {
         }
     }
 
-    private func eyes(_ pose: EyePose) -> some View {
+    private func eyes(_ pose: EyePose, gaze: EyePose = .rest) -> some View {
         ZStack(alignment: .topLeading) {
             ForEach(0..<2, id: \.self) { i in
                 Capsule()
                     .fill(.white)
                     .frame(width: size * LogoGeometry.eyeSize.width, height: size * LogoGeometry.eyeSize.height)
                     .scaleEffect(x: 1, y: pose.openness, anchor: .center)
-                    .offset(x: size * (LogoGeometry.eyeOrigins[i].x + pose.dx),
-                            y: size * (LogoGeometry.eyeOrigins[i].y + pose.dy))
+                    .offset(x: size * (LogoGeometry.eyeOrigins[i].x + pose.dx + gaze.dx),
+                            y: size * (LogoGeometry.eyeOrigins[i].y + pose.dy + gaze.dy))
             }
         }
         .frame(width: size, height: size, alignment: .topLeading)
@@ -153,9 +170,87 @@ struct ShottyMark: View {
     }
 }
 
+/// Remembers the AppKit view behind a logo, to find its centre on screen.
+@MainActor
+final class ScreenAnchor {
+    weak var view: NSView?
+    var screenCenter: CGPoint? {
+        guard let view, let window = view.window else { return nil }
+        let r = window.convertToScreen(view.convert(view.bounds, to: nil))
+        return CGPoint(x: r.midX, y: r.midY)
+    }
+}
+
+private struct ScreenAnchorReader: NSViewRepresentable {
+    let anchor: ScreenAnchor
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        anchor.view = view
+        return view
+    }
+    func updateNSView(_ view: NSView, context: Context) { anchor.view = view }
+}
+
 // MARK: - Menu bar icon
 
+@MainActor
 enum MenuBarIcon {
+    private static var cache: [String: NSImage] = [:]
+    private static weak var statusWindow: NSWindow?
+
+    /// Same as `image`, with the eye offset snapped to half points (one Retina pixel), so moving
+    /// the pointer only redraws the icon when the eyes actually move, and frames are reused.
+    static func cachedImage(active: Bool, pose: EyePose) -> NSImage {
+        let side: CGFloat = 15
+        func snap(_ v: CGFloat) -> CGFloat { (v * side * 2).rounded() / (side * 2) }
+        let p = EyePose(dx: snap(pose.dx), dy: snap(pose.dy), openness: (pose.openness * 20).rounded() / 20)
+        let key = "\(active)|\(p.dx)|\(p.dy)|\(p.openness)"
+        if let hit = cache[key] { return hit }
+        let image = image(active: active, pose: p)
+        if cache.count > 200 { cache.removeAll() }
+        cache[key] = image
+        return image
+    }
+
+    /// Whether Shotty is on (filled icon) or paused (outline).
+    static var active = true
+    /// The hello animation's pose while it plays; otherwise the eyes follow the pointer.
+    static var helloPose: EyePose?
+    private static var shownKey = ""
+    private static weak var button: NSButton?
+
+    /// Puts the current frame on the status item, only if it differs from the one shown.
+    static func refresh(force: Bool = false) {
+        let pose = helloPose ?? PointerTracker.shared.gaze(from: statusItemCenter)
+        let image = cachedImage(active: active, pose: pose)
+        let key = "\(ObjectIdentifier(image))"
+        guard force || key != shownKey, let button = statusButton else { return }
+        shownKey = key
+        button.image = image
+    }
+
+    private static var statusButton: NSButton? {
+        if let button { return button }
+        _ = statusItemCenter
+        func find(_ view: NSView?) -> NSButton? {
+            guard let view else { return nil }
+            if let b = view as? NSButton { return b }
+            for sub in view.subviews { if let b = find(sub) { return b } }
+            return nil
+        }
+        button = find(statusWindow?.contentView)
+        return button
+    }
+
+    /// Centre of Shotty's menu bar item on screen.
+    static var statusItemCenter: CGPoint? {
+        if statusWindow == nil {
+            statusWindow = NSApp.windows.first { String(describing: type(of: $0)).contains("StatusBarWindow") }
+        }
+        guard let frame = statusWindow?.frame else { return nil }
+        return CGPoint(x: frame.midX, y: frame.midY)
+    }
+
     /// 18×18 template image for the menu bar: the rounded square with the eyes cut out.
     /// When paused, the square is drawn as an outline with the eyes filled.
     static func image(active: Bool, pose: EyePose = .rest) -> NSImage {

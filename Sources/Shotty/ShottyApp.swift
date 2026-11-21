@@ -19,6 +19,7 @@ struct ShottyApp: App {
             DispatchQueue.main.async { DemoWindow.show(model: model) }
         }
         DockPolicy.start()
+        if DemoWindow.isAppDemo { DispatchQueue.main.async { DemoWindow.pointerTour() } }
     }
 
     var body: some Scene {
@@ -59,12 +60,20 @@ struct ShottyApp: App {
 struct MenuBarLabel: View {
     let enabled: Bool
     @Environment(\.openWindow) private var openWindow
-    @State private var pose = EyePose.rest
     @State private var playing: Task<Void, Never>?
 
     var body: some View {
-        Image(nsImage: MenuBarIcon.image(active: enabled, pose: pose))
+        // SwiftUI draws the resting icon. The moving frames (hello, following the pointer) are
+        // set on the status item button directly by `MenuBarIcon`, because re-rendering a
+        // MenuBarExtra label 30 times a second costs ~17% CPU, and a direct swap costs ~nothing.
+        Image(nsImage: MenuBarIcon.cachedImage(active: enabled, pose: .rest))
             .accessibilityLabel("Shotty")
+            .onAppear {
+                MenuBarIcon.active = enabled
+                PointerTracker.shared.retain()
+                PointerTracker.shared.onUpdate = { MenuBarIcon.refresh() }
+            }
+            .onChange(of: enabled) { MenuBarIcon.active = enabled; MenuBarIcon.refresh(force: true) }
             .task {
                 guard !DemoWindow.isActive else { return }
                 if Onboarding.shouldShow { openWindow(id: SceneID.welcome) }
@@ -84,11 +93,16 @@ struct MenuBarLabel: View {
             let start = Date()
             while !Task.isCancelled {
                 let t = Date().timeIntervalSince(start)
-                pose = EyeAnimation.pose(at: t, in: keys)
+                MenuBarIcon.helloPose = EyeAnimation.pose(at: t, in: keys)
+                MenuBarIcon.refresh()
                 if t >= EyeAnimation.duration(keys) { break }
                 try? await Task.sleep(for: .milliseconds(33))
             }
-            pose = .rest
+            // A newer run cancelled this one and owns the state now.
+            if Task.isCancelled { return }
+            MenuBarIcon.helloPose = nil
+            MenuBarIcon.refresh()
+            playing = nil
         }
     }
 }

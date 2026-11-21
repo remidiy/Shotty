@@ -10,6 +10,72 @@ enum DemoWindow {
     /// `Shotty --demo-app`: the normal app (menu bar, main window, onboarding) with sample captures.
     /// History isn't saved and nothing is sent. Used for screenshots.
     static var isAppDemo: Bool { CommandLine.arguments.contains("--demo-app") }
+
+    /// `--demo-app --open-main --pointer-tour <dir>`: moves a simulated pointer in a circle around
+    /// the Home logo, writes a frame (window snapshot plus a drawn pointer) every 1/15 s, then
+    /// holds still past the 3 s idle timeout so the eyes settle, and quits. Needs no screen access.
+    static func pointerTour() {
+        let args = CommandLine.arguments
+        guard let i = args.firstIndex(of: "--pointer-tour"), i + 1 < args.count else { return }
+        let dir = URL(fileURLWithPath: args[i + 1], isDirectory: true)
+        if args[i + 1] != "-" { try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+            MainActor.assumeIsolated {
+                guard let window = NSApp.windows.first(where: { $0.title == "Home" }) else { NSApp.terminate(nil); return }
+                // The Home header logo (48 pt) sits about 248 pt from the left and 100 pt from the top.
+                let logo = CGPoint(x: window.frame.minX + 248, y: window.frame.maxY - 100)
+                // `--pointer-tour -`: no frames, 30 updates a second for 10 s (for measuring CPU).
+                let measuring = dir.lastPathComponent == "-"
+                let fps = measuring ? 30.0 : 15.0, moving = measuring ? 300 : 60, total = moving + (measuring ? 0 : 60)
+                var frame = 0
+                var pointer = logo
+                Timer.scheduledTimer(withTimeInterval: 1 / fps, repeats: true) { timer in
+                    MainActor.assumeIsolated {
+                        if frame < moving {
+                            let a = Double(frame) / Double(moving) * 2 * .pi + .pi / 2
+                            pointer = CGPoint(x: logo.x + 170 * cos(a), y: logo.y + 110 * sin(a))
+                            PointerTracker.shared.simulate(pointer)
+                        }
+                        if !measuring {
+                            tourFrame(window, logo: logo, pointer: pointer,
+                                      to: dir.appendingPathComponent(String(format: "f%03d.png", frame)))
+                        }
+                        frame += 1
+                        if frame >= total { timer.invalidate(); NSApp.terminate(nil) }
+                    }
+                }
+            }
+        }
+    }
+
+    private static func tourFrame(_ window: NSWindow, logo: CGPoint, pointer: CGPoint, to url: URL) {
+        guard let view = window.contentView,
+              let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
+        view.cacheDisplay(in: view.bounds, to: rep)
+        let shot = NSImage(size: view.bounds.size)
+        shot.addRepresentation(rep)
+        // A 440 × 300 pt canvas centred on the logo, in screen coordinates.
+        let canvas = NSRect(x: logo.x - 220, y: logo.y - 150, width: 440, height: 300)
+        let image = NSImage(size: canvas.size, flipped: false) { _ in
+            NSColor(white: 0.12, alpha: 1).setFill()
+            NSRect(origin: .zero, size: canvas.size).fill()
+            let content = window.contentRect(forFrameRect: window.frame)
+            shot.draw(in: NSRect(x: content.minX - canvas.minX, y: content.minY - canvas.minY,
+                                 width: content.width, height: content.height))
+            if let arrow = NSImage(systemSymbolName: "cursorarrow", accessibilityDescription: nil)?
+                .withSymbolConfiguration(.init(pointSize: 22, weight: .regular)) {
+                let tinted = NSImage(size: arrow.size, flipped: false) { r in
+                    arrow.draw(in: r); NSColor.white.set(); r.fill(using: .sourceAtop); return true
+                }
+                tinted.draw(at: NSPoint(x: pointer.x - canvas.minX - 4, y: pointer.y - canvas.minY - arrow.size.height + 4),
+                            from: .zero, operation: .sourceOver, fraction: 1)
+            }
+            return true
+        }
+        if let tiff = image.tiffRepresentation, let out = NSBitmapImageRep(data: tiff) {
+            try? out.representation(using: .png, properties: [:])?.write(to: url)
+        }
+    }
     private static var windows: [NSWindow] = []
 
     static func show(model: AppModel) {
