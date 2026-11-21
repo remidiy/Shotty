@@ -9,7 +9,7 @@ enum SendError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .appMissing(let name): "\(name) isn't installed."
-        case .noAccessibility: "Shotty needs Accessibility access to paste."
+        case .noAccessibility: "Accessibility is off for Shotty. Open the menu to allow it."
         }
     }
 }
@@ -23,18 +23,14 @@ struct SendOptions {
 /// Brings the target app forward and pastes the capture (and optional prompt) into it.
 @MainActor
 enum Sender {
-    static var isTrusted: Bool { AXIsProcessTrusted() }
+    static var isTrusted: Bool { Permissions.accessibility }
 
-    static func requestAccessibility() {
-        let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
-        _ = AXIsProcessTrustedWithOptions(options)
-    }
+    static func requestAccessibility() { Permissions.request(.accessibility) }
 
     static func deliver(_ file: URL, to target: Target, options: SendOptions) async throws {
-        guard isTrusted else {
-            requestAccessibility()
-            throw SendError.noAccessibility
-        }
+        // Never prompt from here: a prompt on every send is what made Shotty feel broken.
+        // The panel shows a banner instead (spec 0006).
+        guard isTrusted else { throw SendError.noAccessibility }
         let pasteboard = NSPasteboard.general
         let snapshot = options.restoreClipboard ? PasteboardSnapshot(pasteboard) : nil
         let prompt = options.prompt.trimmingCharacters(in: .whitespacesAndNewlines)

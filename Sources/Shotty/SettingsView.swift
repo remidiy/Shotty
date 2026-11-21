@@ -65,8 +65,19 @@ struct SettingsView: View {
                     if model.accessibilityGranted {
                         Label("Allowed", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
                     } else {
-                        Button("Allow…") { Sender.requestAccessibility() }
+                        Button("Open Settings…") { Permissions.request(.accessibility) }
                     }
+                }
+                LabeledContent("Screen Recording") {
+                    if model.screenRecordingGranted {
+                        Label("Allowed", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+                    } else {
+                        Button("Open Settings…") { Permissions.request(.screenRecording) }
+                    }
+                }
+                if model.unstableSignature {
+                    Text("This copy is ad-hoc signed, so macOS forgets these permissions whenever Shotty is rebuilt or updated. Build with scripts/setup-signing.sh to keep them.")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
             }
         }

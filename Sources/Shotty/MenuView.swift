@@ -16,8 +16,8 @@ struct MenuView: View {
             VStack(alignment: .leading, spacing: 12) {
                 if !model.accessibilityGranted {
                     Callout(symbol: "hand.raised.fill", tint: .orange,
-                            text: "Allow Accessibility so Shotty can paste into other apps.",
-                            action: "Allow…") { Sender.requestAccessibility() }
+                            text: "Allow Accessibility so Shotty can paste into other apps. If it's already on in System Settings, turn it off and on again.",
+                            action: "Open Settings…") { Permissions.request(.accessibility) }
                 }
                 if model.thumbnailSlowsCaptures {
                     Callout(symbol: "timer", tint: .yellow,
