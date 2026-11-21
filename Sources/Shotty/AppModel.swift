@@ -7,7 +7,7 @@ import ServiceManagement
 final class AppModel {
     private let defaults = UserDefaults.standard
 
-    var enabled: Bool { didSet { save(enabled, "enabled"); applyWatching() } }
+    var enabled: Bool { didSet { save(enabled, "enabled"); applyWatching(); PointerTracker.shared.sleeping = !enabled } }
     var includeRecordings: Bool { didSet { save(includeRecordings, "includeRecordings"); watcher.includeRecordings = includeRecordings } }
     var onlyScreenshots: Bool { didSet { save(onlyScreenshots, "onlyScreenshots"); watcher.onlyScreenshots = onlyScreenshots } }
     var autoSend: Bool { didSet { save(autoSend, "autoSend") } }
@@ -58,6 +58,7 @@ final class AppModel {
         animateCaptures = defaults.bool(forKey: "animateCaptures")
         eyesFollowPointer = defaults.bool(forKey: "eyesFollowPointer")
         PointerTracker.shared.enabled = defaults.bool(forKey: "eyesFollowPointer")
+        PointerTracker.shared.sleeping = !defaults.bool(forKey: "enabled")
         followFrontmost = defaults.bool(forKey: "followFrontmost")
         hotKeyEnabled = defaults.bool(forKey: "hotKeyEnabled")
         enabled = defaults.bool(forKey: "enabled")
@@ -75,6 +76,7 @@ final class AppModel {
         watcher = FolderWatcher { [weak self] url in self?.captured(url) }
         watcher.includeRecordings = includeRecordings
         watcher.onlyScreenshots = onlyScreenshots
+        AppModel.current = self
         if DemoWindow.isAppDemo {
             loadDemoCaptures()  // sample data only: nothing is watched, saved or sent
         } else {
@@ -292,6 +294,8 @@ final class AppModel {
     // MARK: - Demo
 
     var isDemo = false
+    /// The app's model, for the demo self-tests.
+    @ObservationIgnored nonisolated(unsafe) static weak var current: AppModel?
 
     func loadDemoCaptures() {
         isDemo = true
@@ -340,7 +344,8 @@ final class AppModel {
 
     // MARK: - Persistence
 
-    private func save(_ value: Any?, _ key: String) { defaults.set(value, forKey: key) }
+    /// Demo mode (sample data, self-tests) never writes the user's settings.
+    private func save(_ value: Any?, _ key: String) { if !isDemo { defaults.set(value, forKey: key) } }
 
     private func saveTargets() {
         defaults.set(try? JSONEncoder().encode(customTargets), forKey: "customTargets")

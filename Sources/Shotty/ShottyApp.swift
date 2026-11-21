@@ -19,7 +19,7 @@ struct ShottyApp: App {
             DispatchQueue.main.async { DemoWindow.show(model: model) }
         }
         DockPolicy.start()
-        if DemoWindow.isAppDemo { DispatchQueue.main.async { DemoWindow.pointerTour() } }
+        if DemoWindow.isAppDemo { DispatchQueue.main.async { DemoWindow.pointerTour(); DemoWindow.sleepTour() } }
     }
 
     var body: some Scene {
@@ -66,14 +66,14 @@ struct MenuBarLabel: View {
         // SwiftUI draws the resting icon. The moving frames (hello, following the pointer) are
         // set on the status item button directly by `MenuBarIcon`, because re-rendering a
         // MenuBarExtra label 30 times a second costs ~17% CPU, and a direct swap costs ~nothing.
-        Image(nsImage: MenuBarIcon.cachedImage(active: enabled, pose: .rest))
+        Image(nsImage: MenuBarIcon.cachedImage(active: enabled, pose: enabled ? .rest : EyeAnimation.asleepPose(reduceMotion: EyeAnimation.reduceMotion)))
             .accessibilityLabel("Shotty")
             .onAppear {
                 MenuBarIcon.active = enabled
                 PointerTracker.shared.retain()
                 PointerTracker.shared.onUpdate = { MenuBarIcon.refresh() }
             }
-            .onChange(of: enabled) { MenuBarIcon.active = enabled; MenuBarIcon.refresh(force: true) }
+            .onChange(of: enabled) { enabled ? wake() : sleep() }
             .task {
                 guard !DemoWindow.isActive else { return }
                 if Onboarding.shouldShow { openWindow(id: SceneID.welcome) }
@@ -84,12 +84,29 @@ struct MenuBarLabel: View {
             .onReceive(NotificationCenter.default.publisher(for: EyeAnimation.playNotification)) { _ in playHello() }
     }
 
-    /// Plays the eye animation by swapping pre-drawn template frames (~30 fps, 2 s).
+    /// Paused: the eyes close (still the filled icon), then it becomes the paused outline.
+    private func sleep() {
+        MenuBarIcon.active = true
+        play(EyeAnimation.sleep(reduceMotion: EyeAnimation.reduceMotion)) {
+            MenuBarIcon.active = false
+        }
+    }
+
+    /// Resumed: the filled icon wakes up (open, double blink, little shake).
+    private func wake() {
+        MenuBarIcon.active = true
+        play(EyeAnimation.wake(reduceMotion: EyeAnimation.reduceMotion))
+    }
+
     private func playHello() {
-        guard !EyeAnimation.reduceMotion else { return }
+        guard !EyeAnimation.reduceMotion, enabled else { return }
+        play(EyeAnimation.hello)
+    }
+
+    /// Plays a clip by swapping pre-drawn template frames (~30 fps). No timer once it ends.
+    private func play(_ keys: [EyeAnimation.Key], then done: @escaping @MainActor () -> Void = {}) {
         playing?.cancel()
         playing = Task { @MainActor in
-            let keys = EyeAnimation.hello
             let start = Date()
             while !Task.isCancelled {
                 let t = Date().timeIntervalSince(start)
@@ -100,8 +117,9 @@ struct MenuBarLabel: View {
             }
             // A newer run cancelled this one and owns the state now.
             if Task.isCancelled { return }
+            done()
             MenuBarIcon.helloPose = nil
-            MenuBarIcon.refresh()
+            MenuBarIcon.refresh(force: true)
             playing = nil
         }
     }
@@ -157,6 +175,11 @@ enum DockPolicy {
     static func windowAppeared() {
         DispatchQueue.main.async {
             MainActor.assumeIsolated {
+                // Self-tests run in the background: off-screen window, no focus stealing.
+                if DemoWindow.isTour {
+                    for w in NSApp.windows where w.title == "Home" { w.setFrameOrigin(NSPoint(x: -4000, y: 200)) }
+                    return
+                }
                 if !DemoWindow.isActive { NSApp.setActivationPolicy(.regular) }
                 NSApp.activate()
             }

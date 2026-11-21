@@ -10,6 +10,8 @@ enum DemoWindow {
     /// `Shotty --demo-app`: the normal app (menu bar, main window, onboarding) with sample captures.
     /// History isn't saved and nothing is sent. Used for screenshots.
     static var isAppDemo: Bool { CommandLine.arguments.contains("--demo-app") }
+    /// A `--pointer-tour` or `--sleep-tour` self-test is running.
+    static var isTour: Bool { CommandLine.arguments.contains("--pointer-tour") || CommandLine.arguments.contains("--sleep-tour") }
 
     /// `--demo-app --open-main --pointer-tour <dir>`: moves a simulated pointer in a circle around
     /// the Home logo, writes a frame (window snapshot plus a drawn pointer) every 1/15 s, then
@@ -48,7 +50,48 @@ enum DemoWindow {
         }
     }
 
-    private static func tourFrame(_ window: NSWindow, logo: CGPoint, pointer: CGPoint, to url: URL) {
+    /// `--demo-app --open-main --sleep-tour <dir>`: snapshots the Home logo at 30 fps while
+    /// Shotty pauses (eyes fall asleep) and resumes (eyes wake up), then quits. `-` writes no frames.
+    static func sleepTour() {
+        let args = CommandLine.arguments
+        guard let i = args.firstIndex(of: "--sleep-tour"), i + 1 < args.count else { return }
+        let measuring = args[i + 1] == "-"
+        // `live`: the same schedule without frames, for recording the real screen.
+        let live = args[i + 1] == "live"
+        let dir = URL(fileURLWithPath: args[i + 1], isDirectory: true)
+        if !measuring && !live { try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+            MainActor.assumeIsolated {
+                guard let window = NSApp.windows.first(where: { $0.title == "Home" }), let model = AppModel.current
+                else { NSApp.terminate(nil); return }
+                let logo = CGPoint(x: window.frame.minX + 248, y: window.frame.maxY - 100)
+                // Measuring: 10 s asleep, then quit. Frames: 0.5 s awake, pause, 1.5 s, resume, 1.5 s,
+                // on a virtual clock that advances 1/30 s per frame.
+                let slow: Double = 1
+                let total = measuring ? 300 : 105
+                var frame = 0
+                if !measuring && !live {
+                    let t0 = Date()
+                    EyeAnimation.now = { t0.addingTimeInterval(Double(frame) / 30) }
+                    EyeAnimation.timeScale = 30
+                }
+                Timer.scheduledTimer(withTimeInterval: 1.0 / 30, repeats: true) { timer in
+                    MainActor.assumeIsolated {
+                        if frame == Int(15 * slow) || (measuring && frame == 0) { model.enabled = false }
+                        if !measuring && frame == Int(60 * slow) { model.enabled = true }
+                        if !measuring && !live {
+                            tourFrame(window, logo: logo, pointer: nil,
+                                      to: dir.appendingPathComponent(String(format: "f%03d.png", frame)))
+                        }
+                        frame += 1
+                        if frame >= total { timer.invalidate(); NSApp.terminate(nil) }
+                    }
+                }
+            }
+        }
+    }
+
+    private static func tourFrame(_ window: NSWindow, logo: CGPoint, pointer: CGPoint?, to url: URL) {
         guard let view = window.contentView,
               let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
         view.cacheDisplay(in: view.bounds, to: rep)
@@ -62,7 +105,7 @@ enum DemoWindow {
             let content = window.contentRect(forFrameRect: window.frame)
             shot.draw(in: NSRect(x: content.minX - canvas.minX, y: content.minY - canvas.minY,
                                  width: content.width, height: content.height))
-            if let arrow = NSImage(systemSymbolName: "cursorarrow", accessibilityDescription: nil)?
+            if let pointer, let arrow = NSImage(systemSymbolName: "cursorarrow", accessibilityDescription: nil)?
                 .withSymbolConfiguration(.init(pointSize: 22, weight: .regular)) {
                 let tinted = NSImage(size: arrow.size, flipped: false) { r in
                     arrow.draw(in: r); NSColor.white.set(); r.fill(using: .sourceAtop); return true

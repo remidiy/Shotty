@@ -19,6 +19,8 @@ final class PointerTracker {
 
     /// The user setting "Eyes follow the pointer".
     var enabled = true { didSet { refresh() } }
+    /// Shotty is paused and its eyes are asleep: no following, no monitors.
+    var sleeping = false { didSet { refresh() } }
 
     @ObservationIgnored private var viewers = 0
     @ObservationIgnored private var monitors: [Any] = []
@@ -56,7 +58,7 @@ final class PointerTracker {
     }
 
     /// Whether eyes should follow right now (setting on, motion allowed, screen awake).
-    var isActive: Bool { enabled && !screenAsleep && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
+    var isActive: Bool { enabled && !sleeping && !screenAsleep && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
 
     /// A logo came on screen. Balance with `release()`.
     func retain() { viewers += 1; refresh() }

@@ -56,7 +56,7 @@ struct MenuView: View {
 
     private var header: some View {
         HStack(spacing: 10) {
-            ShottyMark(size: 26, animated: true, replay: opens)
+            ShottyMark(size: 26, animated: true, replay: opens, asleep: !model.enabled)
             VStack(alignment: .leading, spacing: 0) {
                 Text("Shotty").font(.system(size: 13, weight: .semibold))
                 Text(model.enabled ? "Watching \(model.folder.lastPathComponent)" : "Paused")

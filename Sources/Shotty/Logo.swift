@@ -53,7 +53,56 @@ enum EyeAnimation {
         Key(time: 0.17, pose: .rest),
     ]
 
+    // MARK: Sleep and wake (Pause)
+
+    /// Asleep: thin closed lids, drooped a little.
+    static let asleep = EyePose(dx: 0, dy: 0.025, openness: 0.12)
+    /// Asleep without the droop (Reduce Motion: no travel).
+    static let asleepStill = EyePose(openness: 0.12)
+
+    static func asleepPose(reduceMotion: Bool) -> EyePose { reduceMotion ? asleepStill : asleep }
+
+    /// Eyes slowly close (0.6 s).
+    static func sleep(reduceMotion: Bool) -> [Key] {
+        [Key(time: 0, pose: .rest),
+         Key(time: 0.25, pose: EyePose(openness: 0.7)),
+         Key(time: 0.6, pose: asleepPose(reduceMotion: reduceMotion))]
+    }
+
+    /// Waking like a dog: eyes open a little, a quick double blink, a slight head shake with
+    /// decaying amplitude (±6, ±4, ±2 %), then centre. Reduce Motion: the eyes just open.
+    static func wake(reduceMotion: Bool) -> [Key] {
+        if reduceMotion {
+            return [Key(time: 0, pose: asleepStill), Key(time: 0.3, pose: .rest)]
+        }
+        return [
+            Key(time: 0.00, pose: asleep),
+            Key(time: 0.15, pose: EyePose(dy: 0.01, openness: 0.55)),  // eyes open slightly
+            Key(time: 0.27, pose: .rest),
+            Key(time: 0.33, pose: EyePose(openness: 0.1)),             // blink
+            Key(time: 0.39, pose: .rest),
+            Key(time: 0.45, pose: EyePose(openness: 0.1)),             // blink
+            Key(time: 0.51, pose: .rest),
+            Key(time: 0.60, pose: EyePose(dx: 0.06)),                  // shake
+            Key(time: 0.69, pose: EyePose(dx: -0.04)),
+            Key(time: 0.77, pose: EyePose(dx: 0.02)),
+            Key(time: 0.86, pose: .rest),
+        ]
+    }
+
+    /// A sleepy half-open flutter when the sleeping logo is clicked. It doesn't wake Shotty.
+    static func flutter(reduceMotion: Bool) -> [Key] {
+        let lids = asleepPose(reduceMotion: reduceMotion)
+        var half = lids; half.openness = 0.4
+        return [Key(time: 0, pose: lids), Key(time: 0.18, pose: half), Key(time: 0.3, pose: half), Key(time: 0.6, pose: lids)]
+    }
+
     static func duration(_ keys: [Key]) -> Double { keys.last?.time ?? 0 }
+
+    /// The window logo's clock. `--sleep-tour` replaces it with one that advances 1/30 s per
+    /// captured frame, and stretches `timeScale` so clips don't end early in real time.
+    @MainActor static var now: () -> Date = { Date() }
+    @MainActor static var timeScale: Double = 1
 
     /// The pose `t` seconds into `keys`, eased in and out between keyframes.
     static func pose(at t: Double, in keys: [Key]) -> EyePose {
@@ -86,19 +135,26 @@ struct ShottyMark: View {
     var animated = false
     var idleBlinks = false
     var replay = 0
+    /// Shotty is paused: the eyes close and stay closed (no following, no idle blinks).
+    var asleep = false
     /// A fixed pose (for rendering stills).
     var pose: EyePose? = nil
 
+    enum Clip { case hello, blink, sleep, wake, flutter }
+
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var playback: (start: Date, keys: [EyeAnimation.Key])?
+    @State private var playback: (start: Date, keys: [EyeAnimation.Key], clip: Clip)?
     @State private var shown = false
     @State private var anchor = ScreenAnchor()
 
-    /// Where the pointer pulls the eyes. The hello animation takes over while it plays.
+    /// Where the pointer pulls the eyes. Only a blink mixes with it; other clips take over.
     private var gaze: EyePose {
-        guard pose == nil, playback?.keys.count != EyeAnimation.hello.count else { return .rest }
+        guard pose == nil, !asleep, playback == nil || playback?.clip == .blink else { return .rest }
         return PointerTracker.shared.gaze(from: anchor.screenCenter)
     }
+
+    /// The pose with nothing playing.
+    private var resting: EyePose { pose ?? (asleep ? EyeAnimation.asleepPose(reduceMotion: reduceMotion) : .rest) }
 
     var body: some View {
         let gaze = self.gaze
@@ -108,10 +164,10 @@ struct ShottyMark: View {
             Group {
                 if let playback {
                     TimelineView(.animation) { context in
-                        eyes(EyeAnimation.pose(at: context.date.timeIntervalSince(playback.start), in: playback.keys), gaze: gaze)
+                        eyes(EyeAnimation.pose(at: EyeAnimation.now().timeIntervalSince(playback.start), in: playback.keys), gaze: gaze)
                     }
                 } else {
-                    eyes(pose ?? .rest, gaze: gaze)
+                    eyes(resting, gaze: gaze)
                 }
             }
             // Moves arrive 30 times a second, so they're drawn as-is (cheap); only the drift
@@ -125,23 +181,35 @@ struct ShottyMark: View {
         .opacity(animated && reduceMotion && !shown ? 0 : 1)
         .contentShape(.rect(cornerRadius: size * LogoGeometry.cornerRatio))
         // Click the logo and it blinks (a blink isn't travel, so Reduce Motion keeps it).
-        .onTapGesture { if pose == nil { play(EyeAnimation.blink) } }
+        .onTapGesture {
+            guard pose == nil else { return }
+            if asleep { play(EyeAnimation.flutter(reduceMotion: reduceMotion), .flutter) } else { play(EyeAnimation.blink, .blink) }
+        }
         .accessibilityLabel("Shotty")
         .onAppear {
             guard animated else { return }
-            if reduceMotion {
+            if reduceMotion || asleep {
                 withAnimation(.easeIn(duration: 0.3)) { shown = true }
             } else {
-                play(EyeAnimation.hello)
+                play(EyeAnimation.hello, .hello)
             }
         }
-        .onChange(of: replay) { if animated && !reduceMotion { play(EyeAnimation.hello) } }
-        .task(id: idleBlinks && !reduceMotion) {
-            guard idleBlinks && !reduceMotion else { return }
+        .onChange(of: replay) { if animated && !reduceMotion && !asleep { play(EyeAnimation.hello, .hello) } }
+        .onChange(of: asleep) {
+            guard pose == nil else { return }
+            if asleep {
+                play(EyeAnimation.sleep(reduceMotion: reduceMotion), .sleep)
+            } else {
+                play(EyeAnimation.wake(reduceMotion: reduceMotion), .wake)
+            }
+        }
+        .task(id: idleBlinks && !reduceMotion && !asleep) {
+            // No timer at all while asleep.
+            guard idleBlinks && !reduceMotion && !asleep else { return }
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(Double.random(in: 8...12)))
                 if Task.isCancelled { break }
-                if playback == nil { play(EyeAnimation.blink) }
+                if playback == nil { play(EyeAnimation.blink, .blink) }
             }
         }
     }
@@ -160,11 +228,11 @@ struct ShottyMark: View {
         .frame(width: size, height: size, alignment: .topLeading)
     }
 
-    private func play(_ keys: [EyeAnimation.Key]) {
-        let start = Date()
-        playback = (start, keys)
+    private func play(_ keys: [EyeAnimation.Key], _ clip: Clip) {
+        let start = EyeAnimation.now()
+        playback = (start, keys, clip)
         Task { @MainActor in
-            try? await Task.sleep(for: .seconds(EyeAnimation.duration(keys)))
+            try? await Task.sleep(for: .seconds(EyeAnimation.duration(keys) * EyeAnimation.timeScale))
             if playback?.start == start { playback = nil }
         }
     }
@@ -214,14 +282,17 @@ enum MenuBarIcon {
 
     /// Whether Shotty is on (filled icon) or paused (outline).
     static var active = true
-    /// The hello animation's pose while it plays; otherwise the eyes follow the pointer.
+    /// The pose of the clip playing (hello, sleep, wake); otherwise the eyes follow the pointer,
+    /// or sleep while paused.
     static var helloPose: EyePose?
     private static var shownKey = ""
     private static weak var button: NSButton?
 
     /// Puts the current frame on the status item, only if it differs from the one shown.
     static func refresh(force: Bool = false) {
-        let pose = helloPose ?? PointerTracker.shared.gaze(from: statusItemCenter)
+        let pose = helloPose
+            ?? (active ? PointerTracker.shared.gaze(from: statusItemCenter)
+                       : EyeAnimation.asleepPose(reduceMotion: EyeAnimation.reduceMotion))
         let image = cachedImage(active: active, pose: pose)
         let key = "\(ObjectIdentifier(image))"
         guard force || key != shownKey, let button = statusButton else { return }
