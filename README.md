@@ -26,15 +26,19 @@ Showing an agent what you see usually takes five steps: screenshot, find the fil
 
 ## Install
 
-### Download
+### Download (recommended)
 
-Grab [`Shotty.zip`](https://github.com/remidiy/Shotty/releases/latest/download/Shotty.zip) from the latest release, unzip, and move **Shotty.app** to Applications.
+1. Download **[Shotty.dmg](https://github.com/remidiy/Shotty/releases/latest/download/Shotty.dmg)** from the [latest release](https://github.com/remidiy/Shotty/releases/latest). Prefer a zip? Use [Shotty.zip](https://github.com/remidiy/Shotty/releases/latest/download/Shotty.zip).
+2. Open the DMG and drag **Shotty** onto **Applications**.
+3. Open Shotty from Applications. It appears in the menu bar (camera icon).
 
-Current builds are not yet notarized by Apple, so the first launch is blocked by Gatekeeper. Either right-click Shotty.app → **Open** → **Open**, or run:
+Current builds are not notarized by Apple yet, so macOS blocks the first launch. Either right-click Shotty.app → **Open** → **Open**, or run:
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/Shotty.app
 ```
+
+Older versions are on the [releases page](https://github.com/remidiy/Shotty/releases), each with a versioned DMG, zip and SHA-256 checksums.
 
 ### Homebrew
 
@@ -51,9 +55,18 @@ Needs macOS 26 or later and Xcode 26 or later.
 ```bash
 git clone https://github.com/remidiy/Shotty.git
 cd Shotty
-./scripts/build-app.sh
+./scripts/build-app.sh        # builds dist/Shotty.app (and dist/Shotty.zip)
 open dist/Shotty.app
 ```
+
+### Build a DMG
+
+```bash
+./scripts/build-app.sh
+./scripts/make-dmg.sh         # creates dist/Shotty.dmg with an Applications shortcut
+```
+
+Set `SIGN_ID="Developer ID Application: …"` on both commands to sign with your own certificate.
 
 ## First run
 
@@ -77,6 +90,20 @@ After that, Shotty usually pastes in well under half a second. It shows the time
 ## Could Shortcuts or Folder Actions do this?
 
 Mostly, with glue. On macOS 26, Shortcuts automations can trigger when a file is added to a folder, and so can Folder Actions. The paste itself still needs a "Run AppleScript" step sending keystrokes. You'd also have to handle partly written recordings, separate logic for chat apps vs terminals, switching targets by editing the shortcut, and losing your clipboard. Shotty packages all of that.
+
+## Releases
+
+Every version is published on [GitHub Releases](https://github.com/remidiy/Shotty/releases) with `Shotty.dmg`, `Shotty.zip`, versioned copies and checksums. To cut one:
+
+1. Bump `CFBundleShortVersionString` and `CFBundleVersion` in `Resources/Info.plist` and write `docs/releases/v<version>.md`.
+2. Merge to `main` through a pull request.
+3. On a clean `main`, run:
+
+```bash
+./scripts/release.sh
+```
+
+For a signed and notarized release, set `SIGN_ID` and `NOTARY_PROFILE` first; see [docs/RELEASING.md](docs/RELEASING.md).
 
 ## Develop
 

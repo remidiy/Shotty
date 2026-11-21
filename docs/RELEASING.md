@@ -17,21 +17,24 @@ How to ship a signed, notarized build that opens on any Mac without warnings, an
 ## Each release
 
 ```bash
-# 1. bump CFBundleShortVersionString / CFBundleVersion in Resources/Info.plist, commit
-# 2. build, sign, notarize, staple, zip, and create the GitHub release
+# 1. bump CFBundleShortVersionString / CFBundleVersion in Resources/Info.plist
+# 2. write docs/releases/v<version>.md (release notes), merge to main via PR
+# 3. on a clean main:
+scripts/release.sh                                  # ad-hoc signed (current default)
 SIGN_ID="Developer ID Application: Your Name (TEAMID)" NOTARY_PROFILE=shotty-notary \
-  scripts/release.sh 0.2.0
+  scripts/release.sh                                # signed + notarized
 ```
 
-`scripts/release.sh` does:
+`scripts/release.sh`:
 
-1. `scripts/build-app.sh` with your Developer ID and the hardened runtime.
-2. `xcrun notarytool submit … --wait` to have Apple scan it.
-3. `xcrun stapler staple` so Gatekeeper works offline.
-4. Zips `dist/Shotty-<version>.zip` and prints its SHA-256.
-5. `gh release create v<version>` with the zip attached.
+1. Checks the tree is clean, the version matches `Info.plist` and the tag doesn't exist.
+2. Builds `dist/Shotty.app` (`scripts/build-app.sh`), and when signing, notarizes and staples it.
+3. Packages `Shotty.zip` and `Shotty.dmg` (`scripts/make-dmg.sh`); notarizes and staples the DMG when signing.
+4. Uploads `Shotty.zip`, `Shotty.dmg`, `Shotty-<version>.zip`, `Shotty-<version>.dmg` and `SHA256SUMS.txt` to a new `v<version>` GitHub release, using `docs/releases/v<version>.md` as notes.
 
-Check a build before shipping:
+The unversioned `Shotty.zip` / `Shotty.dmg` names keep `releases/latest/download/…` links (the install site, README) working for every new version.
+
+Check a signed build before shipping:
 
 ```bash
 spctl -a -vvv -t exec dist/Shotty.app     # should say: accepted, source=Notarized Developer ID
