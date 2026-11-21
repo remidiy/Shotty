@@ -59,7 +59,7 @@ When the welcome window, the main window or the menu bar panel opens, the logo's
 - One timeline (`EyeAnimation.hello` in `Logo.swift`) drives both the SwiftUI logo and the menu bar icon.
 - **Menu bar icon**: plays the same sequence at launch and when the panel opens, by swapping freshly drawn 18 pt template images about 30 times a second for 2 s. No idle blinks there.
 - **Reduce Motion**: no movement. The window logos fade in; the menu bar icon stays still.
-- A Rive version (a `.riv` with an "Eyes" state machine played through RiveRuntime) is planned. It needs a signed-in Rive CLI to export the file. This SwiftUI animation stays as the Reduce Motion and load-failure fallback.
+- **Rive**: the same mark and motion are authored as a Rive project in `design/rive/shotty-logo` (state machine `Eyes`: `intro`, `idle`, a `hello` trigger and a `reduceMotion` input). It isn't in the app yet because the Rive workspace's plan adds the Rive splash screen to published files. Once it can publish without it, the `.riv` goes in `Resources/` and is shown with RiveRuntime, with this SwiftUI animation kept for Reduce Motion and load failures.
 
 ### Screenshot helpers
 
