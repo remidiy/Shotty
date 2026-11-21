@@ -30,6 +30,8 @@ final class AppModel {
     var status: String?
     var isSending = false
     var accessibilityGranted = Sender.isTrusted
+    var screenRecordingGranted = Permissions.screenRecording
+    let unstableSignature = Permissions.isAdHocSigned
     var thumbnailSlowsCaptures = FolderWatcher.floatingThumbnailEnabled
 
     @ObservationIgnored private var watcher: FolderWatcher!
@@ -78,6 +80,8 @@ final class AppModel {
                 guard let self else { return }
                 let trusted = Sender.isTrusted
                 if trusted != self.accessibilityGranted { self.accessibilityGranted = trusted }
+                let screen = Permissions.screenRecording
+                if screen != self.screenRecordingGranted { self.screenRecordingGranted = screen }
                 let slow = FolderWatcher.floatingThumbnailEnabled
                 if slow != self.thumbnailSlowsCaptures { self.thumbnailSlowsCaptures = slow }
             }

@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Builds Shotty.app into dist/ (release, ad-hoc signed) and zips it.
+# Builds Shotty.app into dist/ and zips it.
+# Signing: $SIGN_ID if set; otherwise the "Shotty Local Signing" certificate from
+# scripts/setup-signing.sh if present; otherwise ad-hoc (macOS forgets permissions on rebuild).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -16,9 +18,18 @@ cp "$BIN" "$APP/Contents/MacOS/Shotty"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 cp build/icon/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 
-# Ad-hoc signature. Sign with your Developer ID for distribution:
-#   SIGN_ID="Developer ID Application: …" scripts/build-app.sh
-codesign --force --options runtime --sign "${SIGN_ID:--}" "$APP"
+LOCAL_CERT="${SHOTTY_CERT_NAME:-Shotty Local Signing}"
+if [ -z "${SIGN_ID:-}" ] || [ "${SIGN_ID}" = "-" ]; then
+  if [ -z "${SIGN_ID:-}" ] && security find-certificate -c "$LOCAL_CERT" >/dev/null 2>&1; then
+    SIGN_ID="$LOCAL_CERT"
+  else
+    SIGN_ID="-"
+    echo "warning: ad-hoc signing. macOS will forget Shotty's permissions after each rebuild." >&2
+    echo "         Run scripts/setup-signing.sh once to fix that." >&2
+  fi
+fi
+codesign --force --options runtime --identifier com.remidiy.shotty --sign "$SIGN_ID" "$APP"
+codesign -dr - "$APP" 2>&1 | sed -n 's/^# designated => /designated requirement: /p'
 
 (cd dist && rm -f Shotty.zip && ditto -c -k --keepParent Shotty.app Shotty.zip)
 echo "Built $APP"

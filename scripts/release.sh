@@ -35,10 +35,15 @@ if [ -n "$(git status --porcelain)" ]; then
   exit 1
 fi
 
-SIGN_ID="${SIGN_ID:--}" scripts/build-app.sh
+scripts/build-app.sh
 
 NOTARIZE=0
-if [ "${SIGN_ID:--}" != "-" ] && [ -n "${NOTARY_PROFILE:-}" ]; then NOTARIZE=1; fi
+if [ -n "${SIGN_ID:-}" ] && [ "${SIGN_ID}" != "-" ] && [ -n "${NOTARY_PROFILE:-}" ]; then NOTARIZE=1; fi
+if codesign -dv dist/Shotty.app 2>&1 | grep -q "Signature=adhoc"; then
+  echo "Refusing to release an ad-hoc build: users would lose permissions on every update." >&2
+  echo "Run scripts/setup-signing.sh (or set SIGN_ID) first." >&2
+  exit 1
+fi
 
 if [ $NOTARIZE = 1 ]; then
   ditto -c -k --keepParent dist/Shotty.app dist/notarize.zip
@@ -48,7 +53,7 @@ if [ $NOTARIZE = 1 ]; then
 fi
 
 (cd dist && rm -f Shotty.zip && ditto -c -k --keepParent Shotty.app Shotty.zip)
-SIGN_ID="${SIGN_ID:--}" scripts/make-dmg.sh
+scripts/make-dmg.sh
 
 if [ $NOTARIZE = 1 ]; then
   xcrun notarytool submit dist/Shotty.dmg --keychain-profile "$NOTARY_PROFILE" --wait

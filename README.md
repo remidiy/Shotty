@@ -60,6 +60,16 @@ cd Shotty
 open dist/Shotty.app
 ```
 
+### Keep permissions across rebuilds
+
+macOS remembers privacy permissions by code signature. Run this once so every build you make is signed with the same local certificate:
+
+```bash
+./scripts/setup-signing.sh    # one time: creates "Shotty Local Signing" in your login keychain
+./scripts/build-app.sh
+./scripts/install.sh          # copies to /Applications and restarts Shotty
+```
+
 ### Build a DMG
 
 ```bash
@@ -78,6 +88,17 @@ Shotty lives in the menu bar (camera icon). macOS will ask for:
 | **Accessibility** | To press ⌘V (and Return) in the app you picked |
 | **Screen Recording** | Only for Shotty's own ⌃⇧4 capture |
 | **Desktop / folder access** | To notice new files in your screenshot folder |
+
+## Shotty keeps asking for permissions?
+
+Builds before 0.4.1 were signed ad hoc, so macOS treated every update as a new app and forgot what you allowed. From 0.4.1 Shotty is signed with a stable certificate. Clear the old entries once, then allow Shotty again when asked:
+
+```bash
+tccutil reset Accessibility com.remidiy.shotty
+tccutil reset ScreenCapture com.remidiy.shotty
+```
+
+If you build Shotty yourself, run `scripts/setup-signing.sh` once (see above).
 
 ## Why normal screenshots can feel slow
 
