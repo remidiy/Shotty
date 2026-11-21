@@ -183,6 +183,10 @@ final class AppModel {
     }
 
     func send(_ url: URL, to destination: Target? = nil) {
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            status = "\(url.lastPathComponent) was moved or deleted."
+            return
+        }
         guard let target = destination ?? target else { status = "Switch to the app you want, then capture."; return }
         isSending = true
         let start = Date()
@@ -240,19 +244,23 @@ final class AppModel {
         }
     }
 
+    /// Sends the newest capture: whichever is newer of the last history item and the newest file in the folder.
     func sendLatest() {
-        if let latest = recent.first { send(latest.url); return }
-        let names = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: [.creationDateKey])) ?? []
-        let newest = names
-            .filter { watcher.isCandidate($0) }
-            .max { a, b in
-                let da = (try? a.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast
-                let db = (try? b.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast
-                return da < db
-            }
-        guard let newest else { status = "No screenshots in \(folder.lastPathComponent) yet."; return }
-        remember(newest)
-        send(newest)
+        let created: (URL) -> Date = { (try? $0.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast }
+        let files = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: [.creationDateKey])) ?? []
+        let newestFile = files.filter { watcher.isCandidate($0) }.max { created($0) < created($1) }
+        let lastKept = recent.first { $0.exists }
+
+        let pick: URL?
+        switch (lastKept, newestFile) {
+        case let (kept?, file?): pick = created(file) > kept.date ? file : kept.url
+        case let (kept?, nil): pick = kept.url
+        case let (nil, file?): pick = file
+        default: pick = nil
+        }
+        guard let pick else { status = "No screenshots in \(folder.lastPathComponent) yet."; return }
+        if recent.first?.url != pick { remember(pick) }
+        send(pick)
     }
 
     private func mark(_ url: URL, sentTo: String?, error: String?) {
