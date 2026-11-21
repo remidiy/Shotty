@@ -7,6 +7,7 @@ The website mark with eyes that say hello, as a Rive project for the `rive` CLI.
   - `intro` plays on load (2 s): blink, glance left, right, up, settle. Same timeline as `EyeAnimation.hello` in `Sources/Shotty/Logo.swift`.
   - then `idle`: a blink every 10 s, looping.
   - `hello` (trigger) replays the intro; `reduceMotion` (bool) holds the eyes still.
+  - Layer `Click`: pointer down on the logo fires `blink` (trigger), a quick blink on top of whatever the eyes are doing.
 
 ```bash
 rive . --verify                                  # check

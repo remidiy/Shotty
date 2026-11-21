@@ -16,7 +16,7 @@
                 </Shape>
         </Node>
 
-        <Shape x="256" y="256" name="Tile">
+        <Shape x="256" y="256" name="Tile" id="0:30">
             <Rectangle width="512" height="512" cornerRadiusTL="115" name="Path"/>
             <Fill name="Fill">
                 <LinearGradient startX="0" startY="-256" endX="0" endY="256" name="Gradient">
@@ -29,6 +29,12 @@
         <StateMachine name="Eyes" id="0:2">
             <StateMachineBool name="reduceMotion" id="0:40"/>
             <StateMachineTrigger name="hello" id="0:41"/>
+            <StateMachineTrigger name="blink" id="0:42"/>
+
+            <!-- Click (pointer down) anywhere on the logo: blink. -->
+            <StateMachineListenerSingle targetId="0:30" listenerTypeValue="down" name="Click to Blink">
+                <ListenerTriggerChange inputId="0:42"/>
+            </StateMachineListenerSingle>
             <StateMachineLayer name="Eyes" id="0:4">
                 <AnyState x="0" y="-150">
                     <StateTransition stateToId="0:12">
@@ -56,6 +62,23 @@
                 </AnimationState>
                 <AnimationState x="200" y="150" animationId="0:15" id="0:13"/>
             </StateMachineLayer>
+
+            <!-- Runs beside "Eyes": waits (keys nothing), blinks on the trigger, returns. -->
+            <StateMachineLayer name="Click" id="0:5">
+                <AnyState x="0" y="250">
+                    <StateTransition stateToId="0:17">
+                        <TransitionTriggerCondition inputId="0:42"/>
+                    </StateTransition>
+                </AnyState>
+                <ExitState x="600" y="250"/>
+                <EntryState x="0" y="400">
+                    <StateTransition stateToId="0:16"/>
+                </EntryState>
+                <AnimationState x="200" y="400" animationId="0:18" id="0:16"/>
+                <AnimationState x="400" y="400" animationId="0:19" id="0:17">
+                    <StateTransition stateToId="0:16" enableExitTime="true" exitTimeIsPercetange="true" exitTime="100"/>
+                </AnimationState>
+            </StateMachineLayer>
         </StateMachine>
 
         <LinearAnimation name="intro" id="0:10" duration="120" loopValue="oneShot">
@@ -66,6 +89,10 @@
         </LinearAnimation>
         <LinearAnimation name="still" id="0:15" duration="1" loopValue="oneShot">
             <KeyedObject objectId="0:20"><KeyedProperty property="scaleY"><KeyFrameDouble frame="0" value="1" interpolationType="cubic"><CubicEaseInterpolator x1="0.42" y1="0" x2="0.58" y2="1"/></KeyFrameDouble><KeyFrameDouble frame="1" value="1" interpolationType="cubic"><CubicEaseInterpolator x1="0.42" y1="0" x2="0.58" y2="1"/></KeyFrameDouble></KeyedProperty><KeyedProperty property="x"><KeyFrameDouble frame="0" value="256" interpolationType="cubic"><CubicEaseInterpolator x1="0.42" y1="0" x2="0.58" y2="1"/></KeyFrameDouble><KeyFrameDouble frame="1" value="256" interpolationType="cubic"><CubicEaseInterpolator x1="0.42" y1="0" x2="0.58" y2="1"/></KeyFrameDouble></KeyedProperty><KeyedProperty property="y"><KeyFrameDouble frame="0" value="240.5" interpolationType="cubic"><CubicEaseInterpolator x1="0.42" y1="0" x2="0.58" y2="1"/></KeyFrameDouble><KeyFrameDouble frame="1" value="240.5" interpolationType="cubic"><CubicEaseInterpolator x1="0.42" y1="0" x2="0.58" y2="1"/></KeyFrameDouble></KeyedProperty></KeyedObject>
+        </LinearAnimation>
+        <LinearAnimation name="wait" id="0:18" duration="1" loopValue="oneShot"/>
+        <LinearAnimation name="blink" id="0:19" duration="10" loopValue="oneShot">
+            <KeyedObject objectId="0:20"><KeyedProperty property="scaleY"><KeyFrameDouble frame="0" value="1" interpolationType="cubic"><CubicEaseInterpolator x1="0.42" y1="0" x2="0.58" y2="1"/></KeyFrameDouble><KeyFrameDouble frame="5" value="0.1" interpolationType="cubic"><CubicEaseInterpolator x1="0.42" y1="0" x2="0.58" y2="1"/></KeyFrameDouble><KeyFrameDouble frame="10" value="1" interpolationType="cubic"><CubicEaseInterpolator x1="0.42" y1="0" x2="0.58" y2="1"/></KeyFrameDouble></KeyedProperty></KeyedObject>
         </LinearAnimation>
     </Artboard>
 </Rive>
