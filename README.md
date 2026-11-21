@@ -17,7 +17,8 @@ Showing an agent what you see usually takes five steps: screenshot, find the fil
 
 - **Instant capture**: press **⌃⇧4**, select an area (or Space for a window), and it's pasted the moment you let go.
 - **Works with normal screenshots too**: ⇧⌘3, ⇧⌘4 and ⇧⌘5 recordings are picked up from your screenshot folder.
-- **Pick the destination in one click**: Claude, Codex, ChatGPT, Cursor, Terminal, Ghostty, iTerm, Warp, or any other app.
+- **Goes to the app you were using**: work in Cursor, take a screenshot, it lands in Cursor. Switch to Ghostty, it lands there. Or pin one app ("Always send to…").
+- **History you can drag from**: every capture is kept in the menu bar panel. Drag one into any app, send it again, or reveal it in Finder.
 - **Two paste modes**: *Attachment* pastes the image itself (chat apps). *File path* pastes the path, which is what Claude Code and Codex CLI read in a terminal.
 - **Optional prompt** pasted with the shot, and optional **send automatically** (presses Return).
 - **Leaves your clipboard alone**: what you had copied is restored after the paste.
@@ -27,7 +28,13 @@ Showing an agent what you see usually takes five steps: screenshot, find the fil
 
 ### Download
 
-Grab `Shotty.zip` from the [latest release](https://github.com/remidiy/Shotty/releases/latest), unzip, and move **Shotty.app** to Applications.
+Grab [`Shotty.zip`](https://github.com/remidiy/Shotty/releases/latest/download/Shotty.zip) from the latest release, unzip, and move **Shotty.app** to Applications.
+
+Current builds are not yet notarized by Apple, so the first launch is blocked by Gatekeeper. Either right-click Shotty.app → **Open** → **Open**, or run:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Shotty.app
+```
 
 ### Homebrew
 
@@ -83,10 +90,11 @@ dist/Shotty.app/Contents/MacOS/Shotty --demo      # preview the UI with sample d
 | `FolderWatcher.swift` | Notices new captures and waits until they're fully written |
 | `InstantCapture.swift` | The ⌃⇧4 shortcut and `screencapture` call |
 | `Sender.swift` | Brings the target app forward and pastes |
-| `AppModel.swift` | Settings and state |
+| `AppModel.swift` | Settings, state, and tracking the app you were using |
+| `History.swift` | Saved capture history and thumbnails |
 | `MenuView.swift`, `SettingsView.swift` | The UI |
 
-Releasing, signing and notarization: [docs/RELEASING.md](docs/RELEASING.md). Contributions: [CONTRIBUTING.md](CONTRIBUTING.md).
+Feature specs: [docs/specs](docs/specs). Releasing, signing and notarization: [docs/RELEASING.md](docs/RELEASING.md). Contributions: [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 

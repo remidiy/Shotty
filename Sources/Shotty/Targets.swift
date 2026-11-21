@@ -40,6 +40,19 @@ struct Target: Codable, Hashable, Identifiable {
         Target(name: "Warp", bundleID: "dev.warp.Warp-Stable", delivery: .path, symbol: "terminal"),
     ]
 
+    static let terminalBundleIDs: Set<String> = [
+        "com.apple.Terminal", "com.googlecode.iterm2", "com.mitchellh.ghostty", "dev.warp.Warp-Stable",
+        "net.kovidgoyal.kitty", "io.alacritty", "com.github.wez.wezterm", "co.zeit.hyper",
+    ]
+
+    /// The target for whatever app the user was just in.
+    static func forApp(bundleID: String, name: String) -> Target {
+        if let preset = presets.first(where: { $0.bundleID == bundleID }) { return preset }
+        let delivery: Delivery = terminalBundleIDs.contains(bundleID) ? .path : .attachment
+        return Target(name: name, bundleID: bundleID, delivery: delivery,
+                      symbol: delivery == .path ? "terminal" : "app")
+    }
+
     /// Builds a target from an app bundle the user picked.
     static func custom(appURL: URL) -> Target? {
         guard let bundle = Bundle(url: appURL), let id = bundle.bundleIdentifier else { return nil }
