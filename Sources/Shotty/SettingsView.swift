@@ -5,6 +5,18 @@ struct SettingsView: View {
     @Bindable var model: AppModel
 
     var body: some View {
+        SettingsForm(model: model)
+            .frame(width: 460)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+/// The settings content, shared by the Settings window and the main window's Settings section.
+struct SettingsForm: View {
+    @Bindable var model: AppModel
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
         Form {
             Section("Watching") {
                 LabeledContent("Folder") {
@@ -60,6 +72,8 @@ struct SettingsView: View {
             }
 
             Section("General") {
+                Toggle("Eyes follow the pointer", isOn: $model.eyesFollowPointer)
+                Button("Show Welcome Guide…") { openWindow(id: SceneID.welcome) }
                 Toggle("Open at login", isOn: Binding(get: { model.launchAtLogin }, set: { model.launchAtLogin = $0 }))
                 LabeledContent("Accessibility") {
                     if model.accessibilityGranted {
@@ -82,7 +96,5 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 460)
-        .fixedSize(horizontal: false, vertical: true)
     }
 }

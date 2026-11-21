@@ -5,6 +5,10 @@ import SwiftUI
 struct MenuView: View {
     @Bindable var model: AppModel
     @Environment(\.openSettings) private var openSettings
+    @Environment(\.openWindow) private var openWindow
+    @Environment(\.dismiss) private var dismiss
+    @State private var opens = 0
+    @State private var panelWindow: NSWindow?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -38,13 +42,21 @@ struct MenuView: View {
                 .padding(.vertical, 6)
         }
         .frame(width: 320)
+        .background(WindowReader { if panelWindow !== $0 { panelWindow = $0 } })
+        .onAppear { NotificationCenter.default.post(name: EyeAnimation.playNotification, object: nil) }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { note in
+            // The menu bar panel just opened: the logo (and the menu bar icon) say hello.
+            guard let window = note.object as? NSWindow, window === panelWindow else { return }
+            opens += 1
+            NotificationCenter.default.post(name: EyeAnimation.playNotification, object: nil)
+        }
     }
 
     // MARK: Header
 
     private var header: some View {
         HStack(spacing: 10) {
-            LogoPlaceholder(size: 26)
+            ShottyMark(size: 26, animated: true, replay: opens, asleep: !model.enabled)
             VStack(alignment: .leading, spacing: 0) {
                 Text("Shotty").font(.system(size: 13, weight: .semibold))
                 Text(model.enabled ? "Watching \(model.folder.lastPathComponent)" : "Paused")
@@ -214,13 +226,19 @@ struct MenuView: View {
 
     private var footer: some View {
         HStack(spacing: 2) {
+            MenuRowButton(title: "Open Shotty", shortcut: "⌘0") {
+                dismiss()
+                NSApp.activate()
+                openWindow(id: SceneID.main)
+            }
+            .keyboardShortcut("0")
             MenuRowButton(title: "Settings…", shortcut: "⌘,") {
                 NSApp.activate()
                 openSettings()
             }
             .keyboardShortcut(",")
             Spacer()
-            MenuRowButton(title: "Quit Shotty", shortcut: "⌘Q") { NSApp.terminate(nil) }
+            MenuRowButton(title: "Quit", shortcut: "⌘Q") { NSApp.terminate(nil) }
                 .keyboardShortcut("q")
         }
     }
@@ -228,7 +246,7 @@ struct MenuView: View {
 
 // MARK: - Pieces
 
-private struct SectionLabel: View {
+struct SectionLabel: View {
     let text: String
     init(_ text: String) { self.text = text }
     var body: some View {
@@ -236,7 +254,7 @@ private struct SectionLabel: View {
     }
 }
 
-private struct Callout: View {
+struct Callout: View {
     let symbol: String
     let tint: Color
     let text: String
@@ -362,17 +380,15 @@ private struct CaptureRow: View {
     }
 }
 
-/// Stand-in mark until the final logo arrives.
-struct LogoPlaceholder: View {
-    var size: CGFloat = 26
-    var body: some View {
-        RoundedRectangle(cornerRadius: size * 0.28)
-            .fill(Color.accentColor.gradient)
-            .frame(width: size, height: size)
-            .overlay {
-                Image(systemName: "camera.viewfinder")
-                    .font(.system(size: size * 0.52, weight: .semibold))
-                    .foregroundStyle(.white)
-            }
+/// Reports the window a view is in.
+private struct WindowReader: NSViewRepresentable {
+    let onWindow: (NSWindow?) -> Void
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async { onWindow(view.window) }
+        return view
+    }
+    func updateNSView(_ view: NSView, context: Context) {
+        DispatchQueue.main.async { if view.window != nil { onWindow(view.window) } }
     }
 }
