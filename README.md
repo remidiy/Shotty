@@ -1,25 +1,45 @@
-<p align="center"><img src="assets/icon.png" width="128" alt="Shotty icon"></p>
-
 <h1 align="center">Shotty</h1>
 
-<p align="center">A tiny macOS menu bar app that sends every new screenshot or screen recording straight into Claude, Claude Code, Codex, Cursor or any app you pick.</p>
+<p align="center"><b>Screenshot → your AI agent, instantly.</b><br>
+A tiny macOS menu bar app that drops every new screenshot or screen recording straight into Claude, Claude Code, Codex, Cursor or any app you choose.</p>
 
-## What it does
+<p align="center">
+  <img src="assets/screenshots/panel.png" width="320" alt="Shotty menu bar panel">
+  &nbsp;&nbsp;
+  <img src="assets/screenshots/settings.png" width="400" alt="Shotty settings">
+</p>
 
-1. Watches the folder macOS saves screenshots to (`defaults read com.apple.screencapture location`, or the Desktop).
-2. When a new screenshot (⇧⌘3 / ⇧⌘4) or recording (⇧⌘5) finishes writing, Shotty brings your chosen app forward and pastes it in.
-3. Optionally adds a prompt ("What's wrong in this screenshot?") and presses Return for you.
+## Why
 
-Two paste modes, picked per app:
+Showing an agent what you see usually takes five steps: screenshot, find the file, switch apps, drag it in, type a question. Shotty does it in one. Take the shot and it's already in the chat, with your prompt if you want one.
 
-| Mode | What gets pasted | Good for |
-| --- | --- | --- |
-| Attachment | The image/file itself (⌘V) | Claude, Codex, ChatGPT, Cursor |
-| File path | The quoted file path as text | Claude Code or Codex CLI in Terminal, Ghostty, iTerm, Warp |
+## Features
 
-Your clipboard is restored afterwards. The UI is SwiftUI with Liquid Glass (macOS 26+).
+- **Instant capture**: press **⌃⇧4**, select an area (or Space for a window), and it's pasted the moment you let go.
+- **Works with normal screenshots too**: ⇧⌘3, ⇧⌘4 and ⇧⌘5 recordings are picked up from your screenshot folder.
+- **Pick the destination in one click**: Claude, Codex, ChatGPT, Cursor, Terminal, Ghostty, iTerm, Warp, or any other app.
+- **Two paste modes**: *Attachment* pastes the image itself (chat apps). *File path* pastes the path, which is what Claude Code and Codex CLI read in a terminal.
+- **Optional prompt** pasted with the shot, and optional **send automatically** (presses Return).
+- **Leaves your clipboard alone**: what you had copied is restored after the paste.
+- Native SwiftUI with the standard macOS translucent materials. No account, no network, no tracking.
 
 ## Install
+
+### Download
+
+Grab `Shotty.zip` from the [latest release](https://github.com/remidiy/Shotty/releases/latest), unzip, and move **Shotty.app** to Applications.
+
+### Homebrew
+
+```bash
+brew install --cask remidiy/tap/shotty
+```
+
+(Available once the first notarized release is out; see [docs/RELEASING.md](docs/RELEASING.md).)
+
+### Build from source
+
+Needs macOS 26 or later and Xcode 26 or later.
 
 ```bash
 git clone https://github.com/remidiy/Shotty.git
@@ -28,38 +48,45 @@ cd Shotty
 open dist/Shotty.app
 ```
 
-Requires macOS 26 or later and Xcode 26+ (Swift 6). Move `dist/Shotty.app` to `/Applications` if you want it to stay.
+## First run
 
-On first use macOS asks for:
+Shotty lives in the menu bar (camera icon). macOS will ask for:
 
-- **Accessibility**: needed to press ⌘V and Return in the target app (System Settings → Privacy & Security → Accessibility).
-- **Desktop / folder access**: to see new files in your screenshot folder.
+| Permission | Why |
+| --- | --- |
+| **Accessibility** | To press ⌘V (and Return) in the app you picked |
+| **Screen Recording** | Only for Shotty's own ⌃⇧4 capture |
+| **Desktop / folder access** | To notice new files in your screenshot folder |
 
-The build is ad-hoc signed, so macOS treats each rebuild as a new app; re-enable Accessibility after rebuilding.
+## Why normal screenshots can feel slow
 
-**Tip:** turn off *Show Floating Thumbnail* in the ⇧⌘5 Options menu. With it on, macOS waits about 5 seconds before writing the file.
+By default macOS shows a floating thumbnail for about 5 seconds after ⇧⌘4 and only writes the file when it disappears. Nothing can send it before then. Fix it either way:
+
+- Use Shotty's **⌃⇧4** shortcut, which never shows the thumbnail, or
+- Click **Make Instant** in Shotty (or untick *Show Floating Thumbnail* in the ⇧⌘5 Options menu).
+
+After that, Shotty usually pastes in well under half a second. It shows the time for each send.
 
 ## Could Shortcuts or Folder Actions do this?
 
-Mostly, with some glue. On macOS 26, Shortcuts has personal automations with a "files added to a folder" trigger, and older Folder Actions (Automator) do the same. The shortcut can copy the new file and open the target app, but the actual paste needs a "Run AppleScript" step that sends ⌘V through System Events. Trade-offs:
-
-- It can fire on the hidden temporary file or a recording that's still being written unless you add waits.
-- Switching target app, prompt or paste style means editing the shortcut; there's no quick switcher.
-- Attachment vs. file-path pasting (chat apps vs. terminal agents) needs separate branches.
-- Your clipboard gets overwritten.
-- Folder Actions in particular are slow to fire and sometimes silently stop.
-
-Shotty is the same idea with reliable file watching, a one-click target switcher, per-app paste modes, an optional prompt, and clipboard restore.
+Mostly, with glue. On macOS 26, Shortcuts automations can trigger when a file is added to a folder, and so can Folder Actions. The paste itself still needs a "Run AppleScript" step sending keystrokes. You'd also have to handle partly written recordings, separate logic for chat apps vs terminals, switching targets by editing the shortcut, and losing your clipboard. Shotty packages all of that.
 
 ## Develop
 
 ```bash
-swift build          # debug build
-swift run Shotty     # run without bundling (some permissions behave better from the .app)
-swift scripts/make-icon.swift build/icon   # regenerate icon PNGs
+swift build                                       # debug build
+dist/Shotty.app/Contents/MacOS/Shotty --demo      # preview the UI with sample data, sends nothing
 ```
 
-Code lives in `Sources/Shotty/`: `FolderWatcher` (new-file detection), `Sender` (activate + paste), `AppModel` (settings and state), `MenuView` (Liquid Glass UI).
+| File | What it does |
+| --- | --- |
+| `FolderWatcher.swift` | Notices new captures and waits until they're fully written |
+| `InstantCapture.swift` | The ⌃⇧4 shortcut and `screencapture` call |
+| `Sender.swift` | Brings the target app forward and pastes |
+| `AppModel.swift` | Settings and state |
+| `MenuView.swift`, `SettingsView.swift` | The UI |
+
+Releasing, signing and notarization: [docs/RELEASING.md](docs/RELEASING.md). Contributions: [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 

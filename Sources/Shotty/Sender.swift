@@ -37,51 +37,56 @@ enum Sender {
         }
         let pasteboard = NSPasteboard.general
         let snapshot = options.restoreClipboard ? PasteboardSnapshot(pasteboard) : nil
-
-        try await activate(target)
-
         let prompt = options.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Fill the clipboard first so the paste can fire the moment the app is in front.
         switch target.delivery {
         case .attachment:
             writeFile(file, to: pasteboard)
-            pasteShortcut()
-            if !prompt.isEmpty {
-                try await Task.sleep(for: .milliseconds(450))
-                writeText(prompt, to: pasteboard)
-                pasteShortcut()
-            }
         case .path:
             let quoted = shellQuoted(file.path)
             writeText(prompt.isEmpty ? quoted + " " : "\(prompt) \(quoted) ", to: pasteboard)
+        }
+
+        try await activate(target)
+        pasteShortcut()
+
+        if target.delivery == .attachment && !prompt.isEmpty {
+            try await Task.sleep(for: .milliseconds(200))
+            writeText(prompt, to: pasteboard)
             pasteShortcut()
         }
 
         if options.autoSend {
-            // Chat apps need a moment to finish uploading the attachment before Return sends it.
-            try await Task.sleep(for: .milliseconds(target.delivery == .attachment ? 1200 : 250))
+            // Chat apps need a moment to attach the image before Return sends it.
+            try await Task.sleep(for: .milliseconds(target.delivery == .attachment ? 700 : 80))
             press(key: 0x24) // Return
         }
 
         if let snapshot {
-            try await Task.sleep(for: .milliseconds(900))
-            snapshot.restore(to: pasteboard)
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(1000))
+                snapshot.restore(to: pasteboard)
+            }
         }
     }
 
     // MARK: - Activation
 
     private static func activate(_ target: Target) async throws {
+        if NSWorkspace.shared.frontmostApplication?.bundleIdentifier == target.bundleID { return }
         guard let appURL = target.appURL else { throw SendError.appMissing(target.name) }
         let wasRunning = !NSRunningApplication.runningApplications(withBundleIdentifier: target.bundleID).isEmpty
         let config = NSWorkspace.OpenConfiguration()
         config.activates = true
         _ = try await NSWorkspace.shared.openApplication(at: appURL, configuration: config)
-        if !wasRunning { try await Task.sleep(for: .seconds(2)) }
-        for _ in 0..<40 {
-            if NSWorkspace.shared.frontmostApplication?.bundleIdentifier == target.bundleID { break }
-            try await Task.sleep(for: .milliseconds(50))
+        // Poll quickly until the app is frontmost instead of sleeping a fixed time.
+        let deadline = Date().addingTimeInterval(wasRunning ? 1.5 : 6)
+        while NSWorkspace.shared.frontmostApplication?.bundleIdentifier != target.bundleID, Date() < deadline {
+            try await Task.sleep(for: .milliseconds(15))
         }
-        try await Task.sleep(for: .milliseconds(300))
+        // Let its key window take focus. A cold launch needs longer for the input box to exist.
+        try await Task.sleep(for: .milliseconds(wasRunning ? 120 : 1200))
     }
 
     // MARK: - Pasteboard
