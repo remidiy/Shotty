@@ -57,6 +57,7 @@ SwiftUI doesn't present windows at launch when the first scene is a `MenuBarExtr
 When the welcome window, the main window or the menu bar panel opens, the logo's eyes play a ~2 s sequence once: a blink (eyes squash to 10 % height and back in ~0.15 s), a glance left, right and up (the eyes move 8 % of the mark's side, ease-in-out), then settle back to centre. While the welcome or main window is open, the eyes blink once every 8–12 s.
 
 - One timeline (`EyeAnimation.hello` in `Logo.swift`) drives both the SwiftUI logo and the menu bar icon.
+- **Click to blink**: clicking the logo anywhere it appears (welcome, main window, panel) makes it blink once (~0.17 s); rapid clicks blink again. Allowed under Reduce Motion, since the eyes don't travel.
 - **Menu bar icon**: plays the same sequence at launch and when the panel opens, by swapping freshly drawn 18 pt template images about 30 times a second for 2 s. No idle blinks there.
 - **Reduce Motion**: no movement. The window logos fade in; the menu bar icon stays still.
 - **Rive**: the same mark and motion are authored as a Rive project in `design/rive/shotty-logo` (state machine `Eyes`: `intro`, `idle`, a `hello` trigger and a `reduceMotion` input). It isn't in the app yet because the Rive workspace's plan adds the Rive splash screen to published files. Once it can publish without it, the `.riv` goes in `Resources/` and is shown with RiveRuntime, with this SwiftUI animation kept for Reduce Motion and load failures.

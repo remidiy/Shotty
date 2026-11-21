@@ -106,6 +106,9 @@ struct ShottyMark: View {
         }
         .frame(width: size, height: size)
         .opacity(animated && reduceMotion && !shown ? 0 : 1)
+        .contentShape(.rect(cornerRadius: size * LogoGeometry.cornerRatio))
+        // Click the logo and it blinks (a blink isn't travel, so Reduce Motion keeps it).
+        .onTapGesture { if pose == nil { play(EyeAnimation.blink) } }
         .accessibilityLabel("Shotty")
         .onAppear {
             guard animated else { return }
