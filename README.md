@@ -15,6 +15,7 @@ Showing an agent what you see usually takes five steps: screenshot, find the fil
 
 ## Features
 
+- **Watch it fly in**: the screenshot lifts off and arcs into the window of the app it's going to, then a soft ripple marks where it landed. Respects Reduce Motion; can be turned off in Settings.
 - **Instant capture**: press **⌃⇧4**, select an area (or Space for a window), and it's pasted the moment you let go.
 - **Works with normal screenshots too**: ⇧⌘3, ⇧⌘4 and ⇧⌘5 recordings are picked up from your screenshot folder.
 - **Goes to the app you were using**: work in Cursor, take a screenshot, it lands in Cursor. Switch to Ghostty, it lands there. Or pin one app ("Always send to…").
@@ -119,6 +120,7 @@ dist/Shotty.app/Contents/MacOS/Shotty --demo      # preview the UI with sample d
 | `Sender.swift` | Brings the target app forward and pastes |
 | `AppModel.swift` | Settings, state, and tracking the app you were using |
 | `History.swift` | Saved capture history and thumbnails |
+| `FlyInAnimation.swift` | The capture-flies-into-the-app overlay animation |
 | `MenuView.swift`, `SettingsView.swift` | The UI |
 
 Feature specs: [docs/specs](docs/specs). Releasing, signing and notarization: [docs/RELEASING.md](docs/RELEASING.md). Contributions: [CONTRIBUTING.md](CONTRIBUTING.md).
