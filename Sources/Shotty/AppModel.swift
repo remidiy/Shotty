@@ -20,6 +20,8 @@ final class AppModel {
     var hotKeyEnabled: Bool { didSet { save(hotKeyEnabled, "hotKeyEnabled"); applyHotKey() } }
     /// Send to whichever app you were using when you took the capture.
     var followFrontmost: Bool { didSet { save(followFrontmost, "followFrontmost") } }
+    /// Show the capture flying into the target app (spec 0005).
+    var animateCaptures: Bool { didSet { save(animateCaptures, "animateCaptures") } }
 
     /// Every capture, newest first. Saved to disk.
     var recent: [Capture] = [] { didSet { if !isDemo { HistoryStore.save(recent) } } }
@@ -45,8 +47,9 @@ final class AppModel {
         defaults.register(defaults: [
             "enabled": true, "includeRecordings": true, "onlyScreenshots": true,
             "autoSend": false, "restoreClipboard": true, "prompt": "", "hotKeyEnabled": true,
-            "followFrontmost": true,
+            "followFrontmost": true, "animateCaptures": true,
         ])
+        animateCaptures = defaults.bool(forKey: "animateCaptures")
         followFrontmost = defaults.bool(forKey: "followFrontmost")
         hotKeyEnabled = defaults.bool(forKey: "hotKeyEnabled")
         enabled = defaults.bool(forKey: "enabled")
@@ -173,7 +176,7 @@ final class AppModel {
         let destination = target  // the app you were in when the file appeared
         remember(url)
         guard enabled else { return }
-        send(url, to: destination)
+        send(url, to: destination, origin: .capture)
     }
 
     private func remember(_ url: URL) {
@@ -182,7 +185,7 @@ final class AppModel {
         if recent.count > HistoryStore.limit { recent.removeLast(recent.count - HistoryStore.limit) }
     }
 
-    func send(_ url: URL, to destination: Target? = nil) {
+    func send(_ url: URL, to destination: Target? = nil, origin: FlyInAnimation.Origin = .pointer) {
         guard FileManager.default.fileExists(atPath: url.path) else {
             status = "\(url.lastPathComponent) was moved or deleted."
             return
@@ -190,6 +193,9 @@ final class AppModel {
         guard let target = destination ?? target else { status = "Switch to the app you want, then capture."; return }
         isSending = true
         let start = Date()
+        if animateCaptures {
+            FlyInAnimation.play(file: url, origin: origin, targetBundleID: target.bundleID)
+        }
         Task {
             defer { isSending = false }
             do {
@@ -225,7 +231,7 @@ final class AppModel {
         InstantCapture.run { [weak self] url in
             guard let self, let url else { return }
             self.remember(url)
-            self.send(url, to: destination)
+            self.send(url, to: destination, origin: .capture)
         }
     }
 

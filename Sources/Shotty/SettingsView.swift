@@ -45,6 +45,7 @@ struct SettingsView: View {
                         ForEach(model.availableTargets) { Text($0.name).tag($0.bundleID) }
                     }
                 }
+                Toggle("Animate captures into the app", isOn: $model.animateCaptures)
                 Toggle("Send automatically (press Return)", isOn: $model.autoSend)
                 Toggle("Restore my clipboard afterwards", isOn: $model.restoreClipboard)
             }
