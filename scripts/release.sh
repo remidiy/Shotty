@@ -21,6 +21,15 @@ if gh release view "v$VERSION" >/dev/null 2>&1; then
   echo "Release v$VERSION already exists." >&2
   exit 1
 fi
+if [ "$(git rev-parse --abbrev-ref HEAD)" != "main" ]; then
+  echo "Release from main (currently on $(git rev-parse --abbrev-ref HEAD))." >&2
+  exit 1
+fi
+git fetch -q origin main
+if [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]; then
+  echo "Local main differs from origin/main. Pull or push first." >&2
+  exit 1
+fi
 if [ -n "$(git status --porcelain)" ]; then
   echo "Working tree has uncommitted changes. Commit first." >&2
   exit 1
