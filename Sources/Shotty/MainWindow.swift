@@ -114,7 +114,7 @@ private struct HomePane: View {
 
     private var header: some View {
         HStack(spacing: 14) {
-            ShottyMark(size: 48)
+            ShottyMark(size: 48, animated: true, idleBlinks: true)
                 .shadow(color: .black.opacity(0.12), radius: 4, y: 2)
             VStack(alignment: .leading, spacing: 2) {
                 Text("Shotty").font(.title2.weight(.semibold))

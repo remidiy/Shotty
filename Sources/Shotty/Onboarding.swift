@@ -29,7 +29,7 @@ struct OnboardingView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            ShottyMark(size: 64)
+            ShottyMark(size: 64, animated: true, idleBlinks: true)
                 .shadow(color: Color(red: 0.2, green: 0.36, blue: 0.96).opacity(0.25), radius: 10, y: 4)
                 .padding(.top, 36)
                 .padding(.bottom, 18)

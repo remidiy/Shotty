@@ -7,6 +7,8 @@ struct MenuView: View {
     @Environment(\.openSettings) private var openSettings
     @Environment(\.openWindow) private var openWindow
     @Environment(\.dismiss) private var dismiss
+    @State private var opens = 0
+    @State private var panelWindow: NSWindow?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -40,13 +42,21 @@ struct MenuView: View {
                 .padding(.vertical, 6)
         }
         .frame(width: 320)
+        .background(WindowReader { if panelWindow !== $0 { panelWindow = $0 } })
+        .onAppear { NotificationCenter.default.post(name: EyeAnimation.playNotification, object: nil) }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { note in
+            // The menu bar panel just opened: the logo (and the menu bar icon) say hello.
+            guard let window = note.object as? NSWindow, window === panelWindow else { return }
+            opens += 1
+            NotificationCenter.default.post(name: EyeAnimation.playNotification, object: nil)
+        }
     }
 
     // MARK: Header
 
     private var header: some View {
         HStack(spacing: 10) {
-            ShottyMark(size: 26)
+            ShottyMark(size: 26, animated: true, replay: opens)
             VStack(alignment: .leading, spacing: 0) {
                 Text("Shotty").font(.system(size: 13, weight: .semibold))
                 Text(model.enabled ? "Watching \(model.folder.lastPathComponent)" : "Paused")
@@ -367,5 +377,18 @@ private struct CaptureRow: View {
                 Image(systemName: capture.isMovie ? "video.fill" : "photo").font(.system(size: 11)).foregroundStyle(.secondary)
             }
         }
+    }
+}
+
+/// Reports the window a view is in.
+private struct WindowReader: NSViewRepresentable {
+    let onWindow: (NSWindow?) -> Void
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async { onWindow(view.window) }
+        return view
+    }
+    func updateNSView(_ view: NSView, context: Context) {
+        DispatchQueue.main.async { if view.window != nil { onWindow(view.window) } }
     }
 }

@@ -59,16 +59,37 @@ struct ShottyApp: App {
 struct MenuBarLabel: View {
     let enabled: Bool
     @Environment(\.openWindow) private var openWindow
+    @State private var pose = EyePose.rest
+    @State private var playing: Task<Void, Never>?
 
     var body: some View {
-        Image(nsImage: MenuBarIcon.image(active: enabled))
+        Image(nsImage: MenuBarIcon.image(active: enabled, pose: pose))
             .accessibilityLabel("Shotty")
             .task {
                 guard !DemoWindow.isActive else { return }
                 if Onboarding.shouldShow { openWindow(id: SceneID.welcome) }
                 // `--open-main`: open the main window at launch (used for screenshots).
                 if CommandLine.arguments.contains("--open-main") { openWindow(id: SceneID.main) }
+                playHello()
             }
+            .onReceive(NotificationCenter.default.publisher(for: EyeAnimation.playNotification)) { _ in playHello() }
+    }
+
+    /// Plays the eye animation by swapping pre-drawn template frames (~30 fps, 2 s).
+    private func playHello() {
+        guard !EyeAnimation.reduceMotion else { return }
+        playing?.cancel()
+        playing = Task { @MainActor in
+            let keys = EyeAnimation.hello
+            let start = Date()
+            while !Task.isCancelled {
+                let t = Date().timeIntervalSince(start)
+                pose = EyeAnimation.pose(at: t, in: keys)
+                if t >= EyeAnimation.duration(keys) { break }
+                try? await Task.sleep(for: .milliseconds(33))
+            }
+            pose = .rest
+        }
     }
 }
 

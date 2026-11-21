@@ -52,9 +52,18 @@ Skip on every page but the last, Back and Continue, page dots, and **Get Started
 
 SwiftUI doesn't present windows at launch when the first scene is a `MenuBarExtra`, so the menu bar label opens the welcome window on first launch.
 
+### The logo says hello
+
+When the welcome window, the main window or the menu bar panel opens, the logo's eyes play a ~2 s sequence once: a blink (eyes squash to 10 % height and back in ~0.15 s), a glance left, right and up (the eyes move 8 % of the mark's side, ease-in-out), then settle back to centre. While the welcome or main window is open, the eyes blink once every 8–12 s.
+
+- One timeline (`EyeAnimation.hello` in `Logo.swift`) drives both the SwiftUI logo and the menu bar icon.
+- **Menu bar icon**: plays the same sequence at launch and when the panel opens, by swapping freshly drawn 18 pt template images about 30 times a second for 2 s. No idle blinks there.
+- **Reduce Motion**: no movement. The window logos fade in; the menu bar icon stays still.
+- A Rive version (a `.riv` with an "Eyes" state machine played through RiveRuntime) is planned. It needs a signed-in Rive CLI to export the file. This SwiftUI animation stays as the Reduce Motion and load-failure fallback.
+
 ### Screenshot helpers
 
-`Shotty --demo-app` runs the normal app with sample captures. It doesn't watch, save history or send. `--open-main`, `--section <home|history|targets|settings>` and `--welcome-page <0–4>` open a given view. `--demo --snapshot <dir>` now also writes `menubar-icon.png`.
+`Shotty --demo-app` runs the normal app with sample captures. It doesn't watch, save history or send. `--open-main`, `--section <home|history|targets|settings>` and `--welcome-page <0–4>` open a given view. `--demo --snapshot <dir>` now also writes `menubar-icon.png` and `logo-animation-frames.png`.
 
 ## Out of scope
 
@@ -73,5 +82,6 @@ SwiftUI doesn't present windows at launch when the first scene is a `MenuBarExtr
 - Targets: change a paste mode; it shows in the panel. Use pins an app.
 - Menu bar icon is the rounded square with eyes; turning Shotty off shows the outline.
 - `scripts/build-app.sh`: the Dock icon is the website mark.
+- Opening the welcome window, the main window and the menu bar panel each plays the eye animation once; with Reduce Motion on, the logo only fades in.
 
 Screenshots: [assets/screenshots/v0.5.0](../../assets/screenshots/v0.5.0).

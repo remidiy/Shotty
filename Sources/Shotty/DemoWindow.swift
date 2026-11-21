@@ -26,6 +26,7 @@ enum DemoWindow {
                 snapshot(panel, to: dir.appendingPathComponent("panel.png"))
                 snapshot(settings, to: dir.appendingPathComponent("settings.png"))
                 menuBarIconSheet(to: dir.appendingPathComponent("menubar-icon.png"))
+                eyeAnimationFrames(to: dir.appendingPathComponent("logo-animation-frames.png"))
                 NSApp.terminate(nil)
             }
         }
@@ -89,6 +90,33 @@ enum DemoWindow {
         }
         if let tiff = image.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff) {
             try? rep.representation(using: .png, properties: [:])?.write(to: url)
+        }
+    }
+
+    /// Stills of the logo's hello animation, with the menu bar icon's frame under each.
+    private static func eyeAnimationFrames(to url: URL) {
+        let moments: [(Double, String)] = [(0, "Rest"), (0.33, "Blink"), (0.72, "Left"), (1.2, "Right"), (1.6, "Up"), (1.95, "Settle")]
+        let strip = HStack(spacing: 28) {
+            ForEach(moments, id: \.0) { t, label in
+                let pose = EyeAnimation.pose(at: t, in: EyeAnimation.hello)
+                VStack(spacing: 10) {
+                    ShottyMark(size: 96, pose: pose)
+                    Image(nsImage: MenuBarIcon.image(active: true, pose: pose))
+                        .renderingMode(.template)
+                        .resizable()
+                        .interpolation(.high)
+                        .frame(width: 36, height: 36)
+                        .foregroundStyle(.black)
+                    Text(label).font(.system(size: 13, weight: .medium)).foregroundStyle(.black.opacity(0.6))
+                }
+            }
+        }
+        .padding(28)
+        .background(Color(white: 0.96))
+        let renderer = ImageRenderer(content: strip)
+        renderer.scale = 2
+        if let cg = renderer.cgImage {
+            try? NSBitmapImageRep(cgImage: cg).representation(using: .png, properties: [:])?.write(to: url)
         }
     }
 
